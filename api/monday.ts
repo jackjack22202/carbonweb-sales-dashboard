@@ -373,7 +373,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Cache for 5 minutes
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
 
-    return res.status(200).json(data);
+    // Add debug info
+    return res.status(200).json({
+      ...data,
+      _debug: {
+        totalItemsWithDateSigned: items.length,
+        sampleItem: items[0] ? {
+          name: items[0].name,
+          columns: items[0].column_values.map(c => ({ id: c.id, text: c.text }))
+        } : null
+      }
+    });
   } catch (error) {
     console.error('Error fetching Monday data:', error);
     return res.status(500).json({
