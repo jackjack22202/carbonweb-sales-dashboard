@@ -658,47 +658,27 @@ const TopScopesSold = ({ thisWeek, lastWeek }) => {
   );
 };
 
-// ============ TOOLTIP COMPONENT ============
-const Tooltip = ({ children, content }) => {
-  const [show, setShow] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const tooltipRef = React.useRef(null);
-
-  const handleMouseMove = (e) => {
-    setPosition({ x: e.clientX, y: e.clientY });
-  };
-
-  return (
-    <div
-      className="relative"
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-      onMouseMove={handleMouseMove}
-    >
-      {children}
-      {show && (
-        <div
-          ref={tooltipRef}
-          className="fixed z-50 px-3 py-2 text-sm bg-gray-900 text-white rounded-lg shadow-lg pointer-events-none whitespace-nowrap"
-          style={{
-            left: position.x + 12,
-            top: position.y - 10,
-            transform: 'translateY(-100%)'
-          }}
-        >
-          {content}
-        </div>
-      )}
-    </div>
-  );
-};
-
 // ============ SALES LEADERBOARD - STACKED BAR CHART (CW + AE) ============
 const SalesLeaderboard = ({ data, loading, availableHeight }) => {
   const { settings } = useSettings();
+  const [tooltip, setTooltip] = useState({ show: false, content: '', x: 0, y: 0 });
 
   // Filter out excluded reps
   const filteredData = data ? data.filter(rep => !settings.excludedReps?.includes(rep.name)) : [];
+
+  const handleMouseEnter = (e, content) => {
+    setTooltip({ show: true, content, x: e.clientX, y: e.clientY });
+  };
+
+  const handleMouseMove = (e) => {
+    if (tooltip.show) {
+      setTooltip(prev => ({ ...prev, x: e.clientX, y: e.clientY }));
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setTooltip({ show: false, content: '', x: 0, y: 0 });
+  };
 
   if (loading || !data || filteredData.length === 0) {
     return (
@@ -742,6 +722,20 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
 
   return (
     <Card className="p-5 h-full flex flex-col">
+      {/* Global tooltip */}
+      {tooltip.show && (
+        <div
+          className="fixed z-50 px-3 py-2 text-sm bg-gray-900 text-white rounded-lg shadow-lg pointer-events-none whitespace-nowrap"
+          style={{
+            left: tooltip.x + 12,
+            top: tooltip.y - 10,
+            transform: 'translateY(-100%)'
+          }}
+        >
+          {tooltip.content}
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-semibold text-gray-800">Sales Leaderboard</h2>
         <select className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
@@ -771,50 +765,54 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
                 )}
               </div>
 
-              {/* Bar container - NO background grey, just transparent */}
+              {/* Bar container */}
               <div
                 className="flex-1 relative rounded-xl overflow-visible"
                 style={{ height: `${barHeight}px` }}
               >
-                {/* Last month bar (lighter grey) with tooltip */}
-                <Tooltip content={`Last Month: ${formatCurrency(rep.lastMonth)}`}>
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-xl cursor-pointer"
-                    style={{
-                      width: `${lastMonthWidthPercent}%`,
-                      backgroundColor: LIGHT_GREY,
-                    }}
-                  />
-                </Tooltip>
+                {/* Last month bar (lighter grey) */}
+                <div
+                  className="absolute inset-y-0 left-0 rounded-xl cursor-pointer"
+                  style={{
+                    width: `${lastMonthWidthPercent}%`,
+                    backgroundColor: LIGHT_GREY,
+                    height: `${barHeight}px`,
+                  }}
+                  onMouseEnter={(e) => handleMouseEnter(e, `Last Month: ${formatCurrency(rep.lastMonth)}`)}
+                  onMouseMove={handleMouseMove}
+                  onMouseLeave={handleMouseLeave}
+                />
 
-                {/* Stacked current month bars with tooltips */}
+                {/* Stacked current month bars */}
                 <div
                   className="absolute inset-y-0 left-0 flex rounded-xl overflow-hidden transition-all duration-1000 ease-out"
-                  style={{ width: `${totalCurrentPercent}%` }}
+                  style={{ width: `${totalCurrentPercent}%`, height: `${barHeight}px` }}
                 >
                   {/* CW Sourced portion (purple) */}
                   {cwWidthPercent > 0 && (
-                    <Tooltip content={`CW Sourced: ${formatCurrency(rep.currentMonthCW || 0)}`}>
-                      <div
-                        className="h-full cursor-pointer"
-                        style={{
-                          width: `${(cwWidthPercent / totalCurrentPercent) * 100}%`,
-                          backgroundColor: cwColor,
-                        }}
-                      />
-                    </Tooltip>
+                    <div
+                      className="h-full cursor-pointer"
+                      style={{
+                        width: `${(cwWidthPercent / totalCurrentPercent) * 100}%`,
+                        backgroundColor: cwColor,
+                      }}
+                      onMouseEnter={(e) => handleMouseEnter(e, `CW Sourced: ${formatCurrency(rep.currentMonthCW || 0)}`)}
+                      onMouseMove={handleMouseMove}
+                      onMouseLeave={handleMouseLeave}
+                    />
                   )}
                   {/* AE Sourced portion (teal) */}
                   {aeWidthPercent > 0 && (
-                    <Tooltip content={`AE Sourced: ${formatCurrency(rep.currentMonthAE || 0)}`}>
-                      <div
-                        className="h-full cursor-pointer"
-                        style={{
-                          width: `${(aeWidthPercent / totalCurrentPercent) * 100}%`,
-                          backgroundColor: aeColor,
-                        }}
-                      />
-                    </Tooltip>
+                    <div
+                      className="h-full cursor-pointer"
+                      style={{
+                        width: `${(aeWidthPercent / totalCurrentPercent) * 100}%`,
+                        backgroundColor: aeColor,
+                      }}
+                      onMouseEnter={(e) => handleMouseEnter(e, `AE Sourced: ${formatCurrency(rep.currentMonthAE || 0)}`)}
+                      onMouseMove={handleMouseMove}
+                      onMouseLeave={handleMouseLeave}
+                    />
                   )}
                 </div>
 
