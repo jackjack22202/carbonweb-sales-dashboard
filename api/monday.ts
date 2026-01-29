@@ -129,6 +129,49 @@ function formatTimestamp(date: Date): string {
   return `${diffDays} days ago`;
 }
 
+interface MondayUser {
+  id: string;
+  name: string;
+  photo_thumb: string | null;
+}
+
+// Fetch all users to get their photo URLs
+async function fetchUsers(apiToken: string): Promise<Map<number, MondayUser>> {
+  const query = `
+    query {
+      users {
+        id
+        name
+        photo_thumb
+      }
+    }
+  `;
+
+  const response = await fetch(MONDAY_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': apiToken,
+      'API-Version': '2024-10'
+    },
+    body: JSON.stringify({ query })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Monday API error fetching users: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const users = data.data?.users || [];
+
+  const userMap = new Map<number, MondayUser>();
+  for (const user of users) {
+    userMap.set(parseInt(user.id), user);
+  }
+
+  return userMap;
+}
+
 async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
   // Fetch items with pagination - a deal is "won" if Date Signed is populated
   const allItems: MondayItem[] = [];
@@ -198,7 +241,7 @@ async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
   return allItems;
 }
 
-function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThreshold: number = 0): DashboardData {
+function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThreshold: number, userMap: Map<number, MondayUser>): DashboardData {
   const repMap = new Map<string, {
     name: string;
     photoUrl: string | null;
@@ -238,14 +281,17 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
     const dateSigned = parseDate(dateSignedStr);
     const leadSourceType = leadSourceCol?.text || '';
 
-    // Extract photo URL from deal_owner value (people column)
+    // Extract photo URL from deal_owner by looking up user ID in userMap
     if (ownerCol?.value && !repPhotoMap.has(repName)) {
       try {
         const parsed = JSON.parse(ownerCol.value);
         if (parsed.personsAndTeams && parsed.personsAndTeams.length > 0) {
           const person = parsed.personsAndTeams[0];
-          if (person.photoUrl) {
-            repPhotoMap.set(repName, person.photoUrl);
+          if (person.id && person.kind === 'person') {
+            const user = userMap.get(person.id);
+            if (user?.photo_thumb) {
+              repPhotoMap.set(repName, user.photo_thumb);
+            }
           }
         }
       } catch {
@@ -424,8 +470,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Get threshold from query parameter (sent from client settings)
     const topDealsMinThreshold = parseInt(req.query.minThreshold as string || '0', 10);
 
-    const items = await fetchMondayData(apiToken);
-    const data = processData(items, monthlyGoal, topDealsMinThreshold);
+    // Fetch users and items in parallel for better performance
+    const [userMap, items] = await Promise.all([
+      fetchUsers(apiToken),
+      fetchMondayData(apiToken)
+    ]);
+    const data = processData(items, monthlyGoal, topDealsMinThreshold, userMap);
 
     // Cache for 5 minutes
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
