@@ -192,12 +192,88 @@ async function fetchUsers(apiToken: string): Promise<Map<number, MondayUser>> {
 }
 
 async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
-  // Fetch items with pagination - a deal is "won" if Date Signed is populated
+  // Calculate date range - only need last 2 months
+  const twoMonthsAgo = new Date();
+  twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+  twoMonthsAgo.setDate(1);
+  const dateFilter = twoMonthsAgo.toISOString().split('T')[0];
+
+  // Use items_page_by_column_values to filter by date - much faster than fetching all
+  const query = `
+    query {
+      boards(ids: [${DEALS_BOARD_ID}]) {
+        items_page_by_column_values(
+          limit: 500
+          columns: [{column_id: "date4__1", column_values: []}]
+        ) {
+          cursor
+          items {
+            id
+            name
+            column_values(ids: ["deal_owner", "deal_value", "date4__1", "color_mm01fk8y", "connect_boards5__1", "link_to___scopes____1"]) {
+              id
+              text
+              value
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const response = await fetch(MONDAY_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': apiToken,
+        'API-Version': '2024-10'
+      },
+      body: JSON.stringify({ query })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Monday API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.errors) {
+      // Fall back to regular pagination if column value filter doesn't work
+      console.error('Monday query error, falling back to pagination:', data.errors);
+      return fetchMondayDataFallback(apiToken);
+    }
+
+    const itemsPage = data.data?.boards?.[0]?.items_page_by_column_values;
+    const items = itemsPage?.items || [];
+
+    // Filter to items from last 2 months with date signed
+    const filteredItems = items.filter((item: MondayItem) => {
+      const dateSignedCol = item.column_values.find(c => c.id === 'date4__1');
+      if (!dateSignedCol?.text || dateSignedCol.text.trim() === '') return false;
+      const dateSigned = new Date(dateSignedCol.text);
+      return !isNaN(dateSigned.getTime()) && dateSigned >= twoMonthsAgo;
+    });
+
+    return filteredItems;
+  } catch (error) {
+    console.error('Error in fetchMondayData:', error);
+    return fetchMondayDataFallback(apiToken);
+  }
+}
+
+// Fallback to paginated fetch if column value query fails
+async function fetchMondayDataFallback(apiToken: string): Promise<MondayItem[]> {
   const allItems: MondayItem[] = [];
   let cursor: string | null = null;
+  let pageCount = 0;
+  const maxPages = 3; // Limit to 3 pages (1500 items) to avoid timeout
+
+  const twoMonthsAgo = new Date();
+  twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+  twoMonthsAgo.setDate(1);
 
   do {
-    // Query only the specific columns we need for performance
     const query = `
       query ($cursor: String) {
         boards(ids: [${DEALS_BOARD_ID}]) {
@@ -224,47 +300,28 @@ async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
         'Authorization': apiToken,
         'API-Version': '2024-10'
       },
-      body: JSON.stringify({
-        query,
-        variables: { cursor }
-      })
+      body: JSON.stringify({ query, variables: { cursor } })
     });
 
-    if (!response.ok) {
-      throw new Error(`Monday API error: ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error(`Monday API error: ${response.status}`);
     const data = await response.json();
-
-    if (data.errors) {
-      throw new Error(`Monday GraphQL error: ${JSON.stringify(data.errors)}`);
-    }
+    if (data.errors) throw new Error(`GraphQL error: ${JSON.stringify(data.errors)}`);
 
     const itemsPage = data.data?.boards?.[0]?.items_page;
     const items = itemsPage?.items || [];
 
-    // Filter to only items where Date Signed is populated AND within last 2 months
-    const twoMonthsAgo = new Date();
-    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-    twoMonthsAgo.setDate(1);
-    twoMonthsAgo.setHours(0, 0, 0, 0);
-
     const signedItems = items.filter((item: MondayItem) => {
       const dateSignedCol = item.column_values.find(c => c.id === 'date4__1');
-      if (!dateSignedCol?.text || dateSignedCol.text.trim() === '') return false;
-
-      // Only include deals from the last 2 months
+      if (!dateSignedCol?.text) return false;
       const dateSigned = new Date(dateSignedCol.text);
       return !isNaN(dateSigned.getTime()) && dateSigned >= twoMonthsAgo;
     });
 
     allItems.push(...signedItems);
     cursor = itemsPage?.cursor || null;
+    pageCount++;
 
-    // Safety limit - stop after fetching too many pages
-    if (allItems.length > 5000) break;
-
-  } while (cursor);
+  } while (cursor && pageCount < maxPages);
 
   return allItems;
 }
