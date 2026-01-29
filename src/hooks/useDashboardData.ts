@@ -5,6 +5,7 @@ export interface SalesRep {
   name: string;
   initials: string;
   color: string;
+  photoUrl: string | null;
   currentMonth: number;
   currentMonthCW: number;
   currentMonthAE: number;
@@ -14,7 +15,7 @@ export interface SalesRep {
 export interface TopDeal {
   company: string;
   value: number;
-  rep: { name: string; initials: string; color: string };
+  rep: { name: string; initials: string; color: string; photoUrl: string | null };
 }
 
 export interface TargetData {

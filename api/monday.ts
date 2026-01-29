@@ -16,12 +16,20 @@ interface MondayItem {
   }>;
 }
 
+interface RepInfo {
+  name: string;
+  initials: string;
+  color: string;
+  photoUrl: string | null;
+}
+
 interface DashboardData {
   salesReps: Array<{
     repId: string;
     name: string;
     initials: string;
     color: string;
+    photoUrl: string | null;
     currentMonth: number;
     currentMonthCW: number;
     currentMonthAE: number;
@@ -31,12 +39,12 @@ interface DashboardData {
     thisWeek: {
       company: string;
       value: number;
-      rep: { name: string; initials: string; color: string };
+      rep: RepInfo;
     } | null;
     lastWeek: {
       company: string;
       value: number;
-      rep: { name: string; initials: string; color: string };
+      rep: RepInfo;
     } | null;
   };
   cwTarget: { current: number; goal: number; label: string };
@@ -48,7 +56,7 @@ interface DashboardData {
     headline: string;
     body: string;
     timestamp: string;
-    rep: { name: string; initials: string; color: string } | null;
+    rep: RepInfo | null;
   }>;
 }
 
@@ -119,33 +127,6 @@ function formatTimestamp(date: Date): string {
   if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
   if (diffDays === 1) return '1 day ago';
   return `${diffDays} days ago`;
-}
-
-async function fetchBoardColumns(apiToken: string): Promise<Array<{id: string, title: string, type: string}>> {
-  const query = `
-    query {
-      boards(ids: [${DEALS_BOARD_ID}]) {
-        columns {
-          id
-          title
-          type
-        }
-      }
-    }
-  `;
-
-  const response = await fetch(MONDAY_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': apiToken,
-      'API-Version': '2024-10'
-    },
-    body: JSON.stringify({ query })
-  });
-
-  const data = await response.json();
-  return data.data?.boards?.[0]?.columns || [];
 }
 
 async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
@@ -220,12 +201,16 @@ async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
 function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThreshold: number = 0): DashboardData {
   const repMap = new Map<string, {
     name: string;
+    photoUrl: string | null;
     currentMonth: number;
     currentMonthCW: number;
     currentMonthAE: number;
     lastMonth: number;
     deals: Array<{ company: string; value: number; dateSigned: Date }>;
   }>();
+
+  // Map to store photo URLs by rep name
+  const repPhotoMap = new Map<string, string>();
 
   let cwSourcedCurrentMonth = 0;
   let aeSourcedCurrentMonth = 0;
@@ -253,6 +238,21 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
     const dateSigned = parseDate(dateSignedStr);
     const leadSourceType = leadSourceCol?.text || '';
 
+    // Extract photo URL from deal_owner value (people column)
+    if (ownerCol?.value && !repPhotoMap.has(repName)) {
+      try {
+        const parsed = JSON.parse(ownerCol.value);
+        if (parsed.personsAndTeams && parsed.personsAndTeams.length > 0) {
+          const person = parsed.personsAndTeams[0];
+          if (person.photoUrl) {
+            repPhotoMap.set(repName, person.photoUrl);
+          }
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+
     // Extract company name from item name (format: "Company Name\n [Type]\n [ID]")
     const companyName = item.name.split('\n')[0].trim();
 
@@ -260,7 +260,7 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
 
     // Update rep totals
     if (!repMap.has(repName)) {
-      repMap.set(repName, { name: repName, currentMonth: 0, currentMonthCW: 0, currentMonthAE: 0, lastMonth: 0, deals: [] });
+      repMap.set(repName, { name: repName, photoUrl: repPhotoMap.get(repName) || null, currentMonth: 0, currentMonthCW: 0, currentMonthAE: 0, lastMonth: 0, deals: [] });
     }
     const rep = repMap.get(repName)!;
 
@@ -321,6 +321,7 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
       name: rep.name,
       initials: getInitials(rep.name),
       color: getRepColor(repColorIndex++),
+      photoUrl: rep.photoUrl || repPhotoMap.get(rep.name) || null,
       currentMonth: Math.round(rep.currentMonth),
       currentMonthCW: Math.round(rep.currentMonthCW),
       currentMonthAE: Math.round(rep.currentMonthAE),
@@ -331,11 +332,11 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
   const thisWeekDeals = recentDeals.filter(d => d.isThisWeek).sort((a, b) => b.value - a.value);
   const lastWeekDeals = recentDeals.filter(d => d.isLastWeek).sort((a, b) => b.value - a.value);
 
-  const getRepInfo = (repName: string) => {
+  const getRepInfo = (repName: string): RepInfo => {
     const rep = salesReps.find(r => r.name === repName);
     return rep
-      ? { name: rep.name, initials: rep.initials, color: rep.color }
-      : { name: repName, initials: getInitials(repName), color: '#6B7280' };
+      ? { name: rep.name, initials: rep.initials, color: rep.color, photoUrl: rep.photoUrl }
+      : { name: repName, initials: getInitials(repName), color: '#6B7280', photoUrl: repPhotoMap.get(repName) || null };
   };
 
   const topDeals = {
@@ -377,7 +378,7 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
       headline: `Team hits ${goalPercentage}% of monthly goal!`,
       body: `$${totalCurrentMonth.toLocaleString()} closed this month.`,
       timestamp: 'Today',
-      rep: { name: 'Team', initials: '🎯', color: '#8B5CF6' }
+      rep: { name: 'Team', initials: '🎯', color: '#8B5CF6', photoUrl: null }
     });
   }
 
@@ -429,69 +430,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Cache for 5 minutes
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
 
-    // Helper to check if scope column has linked items
-    const hasScopeLinked = (item: MondayItem): boolean => {
-      const scopeCol = item.column_values.find(c => c.id === 'link_to___scopes____1');
-      if (scopeCol?.text && scopeCol.text.trim() !== '') return true;
-      if (scopeCol?.value) {
-        try {
-          const parsed = JSON.parse(scopeCol.value);
-          return parsed.linkedPulseIds && parsed.linkedPulseIds.length > 0;
-        } catch {
-          return false;
-        }
-      }
-      return false;
-    };
-
-    // Add debug info - check for scope column
-    const itemsWithScope = items.filter(hasScopeLinked);
-
-    // Find recent items (this week or last week) with scopes
-    const now = new Date();
-    const startOfThisWeek = new Date(now);
-    startOfThisWeek.setDate(now.getDate() - now.getDay());
-    startOfThisWeek.setHours(0, 0, 0, 0);
-    const startOfLastWeek = new Date(startOfThisWeek);
-    startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
-
-    const recentItemsWithScope = items.filter(item => {
-      const dateSignedCol = item.column_values.find(c => c.id === 'date4__1');
-      const valueCol = item.column_values.find(c => c.id === 'deal_value');
-      const dateSigned = parseDate(dateSignedCol?.text ?? null);
-      const dealValue = parseFloat(valueCol?.text || '0') || 0;
-
-      if (!dateSigned) return false;
-      const isRecent = dateSigned >= startOfLastWeek;
-      return isRecent && hasScopeLinked(item) && dealValue >= topDealsMinThreshold;
-    });
-
-    // Find all unique lead source values
-    const leadSourceValues = new Set<string>();
-    items.forEach(item => {
-      const leadSourceCol = item.column_values.find(c => c.id === 'color_mm01fk8y');
-      if (leadSourceCol?.text) leadSourceValues.add(leadSourceCol.text);
-    });
-
-    // Find recent items (for top deals debugging)
-    const recentItems = items.filter(item => {
-      const dateSignedCol = item.column_values.find(c => c.id === 'date4__1');
-      const dateSigned = parseDate(dateSignedCol?.text ?? null);
-      if (!dateSigned) return false;
-      return dateSigned >= startOfLastWeek;
-    });
-
-    return res.status(200).json({
-      ...data,
-      _debug: {
-        totalItemsWithDateSigned: items.length,
-        itemsWithScope: itemsWithScope.length,
-        topDealsMinThreshold,
-        recentItemsCount: recentItems.length,
-        recentItemsWithScopeCount: recentItemsWithScope.length,
-        leadSourceValuesFound: Array.from(leadSourceValues)
-      }
-    });
+    return res.status(200).json(data);
   } catch (error) {
     console.error('Error fetching Monday data:', error);
     return res.status(500).json({

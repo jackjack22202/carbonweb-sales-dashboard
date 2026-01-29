@@ -83,19 +83,40 @@ const getCurrentMonth = () => {
 };
 
 // ============ AVATAR COMPONENT ============
-const Avatar = ({ initials, color, size = 40 }) => (
-  <div
-    className="rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0"
-    style={{
-      width: size,
-      height: size,
-      backgroundColor: color,
-      fontSize: size * 0.38
-    }}
-  >
-    {initials}
-  </div>
-);
+const Avatar = ({ initials, color, size = 40, photoUrl = null }) => {
+  const [imgError, setImgError] = useState(false);
+
+  // Show photo if URL exists and hasn't errored
+  if (photoUrl && !imgError) {
+    return (
+      <img
+        src={photoUrl}
+        alt={initials}
+        className="rounded-full flex-shrink-0 object-cover"
+        style={{
+          width: size,
+          height: size,
+        }}
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+
+  // Fallback to initials
+  return (
+    <div
+      className="rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0"
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: color,
+        fontSize: size * 0.38
+      }}
+    >
+      {initials}
+    </div>
+  );
+};
 
 // ============ CARD WRAPPER ============
 const Card = ({ children, className = '' }) => (
@@ -539,7 +560,7 @@ const TopDeals = ({ thisWeek, lastWeek }) => {
       <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">{title}</p>
       {deal ? (
         <div className="flex-1 flex items-center justify-center gap-3">
-          <Avatar initials={deal.rep.initials} color={deal.rep.color} size={48} />
+          <Avatar initials={deal.rep.initials} color={deal.rep.color} size={48} photoUrl={deal.rep.photoUrl} />
           <div className="text-center">
             <p className="font-medium text-gray-800 text-sm">{deal.company}</p>
             <p className="text-2xl font-bold" style={{ color: deal.rep.color }}>{formatCurrency(deal.value)}</p>
@@ -623,7 +644,7 @@ const SalesLeaderboard = ({ data, loading }) => {
             <div key={rep.repId} className="flex items-center gap-3">
               {/* Avatar with trophy for top */}
               <div className="relative flex-shrink-0">
-                <Avatar initials={rep.initials} color={rep.color} size={42} />
+                <Avatar initials={rep.initials} color={rep.color} size={42} photoUrl={rep.photoUrl} />
                 {isTop && (
                   <span className="absolute -top-2 -right-1 text-sm">🏆</span>
                 )}
@@ -765,7 +786,7 @@ const SalesNews = ({ articles, loading, onRefresh }) => {
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <h3 className="font-semibold text-gray-800 text-sm">{article.headline}</h3>
                     {article.rep && (
-                      <Avatar initials={article.rep.initials} color={article.rep.color} size={22} />
+                      <Avatar initials={article.rep.initials} color={article.rep.color} size={22} photoUrl={article.rep.photoUrl} />
                     )}
                   </div>
                   <p className="text-sm text-gray-600 mb-2 leading-relaxed">{article.body}</p>
