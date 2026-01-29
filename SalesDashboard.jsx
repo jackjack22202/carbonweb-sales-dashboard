@@ -8,7 +8,8 @@ const defaultSettings = {
   aeGoal: 100000,
   primaryColor: '#8B5CF6',
   accentColor: '#14B8A6',
-  backgroundColor: '#F9FAFB'
+  backgroundColor: '#F9FAFB',
+  excludedReps: [] // Array of rep names to exclude from leaderboard
 };
 
 const SettingsContext = createContext({
@@ -140,7 +141,7 @@ const LoadingSkeleton = () => (
 );
 
 // ============ SETTINGS PANEL ============
-const SettingsPanel = ({ isOpen, onClose }) => {
+const SettingsPanel = ({ isOpen, onClose, availableReps = [] }) => {
   const { settings, updateSettings } = useSettings();
   const [localSettings, setLocalSettings] = useState(settings);
 
@@ -155,6 +156,21 @@ const SettingsPanel = ({ isOpen, onClose }) => {
 
   const handleReset = () => {
     setLocalSettings(defaultSettings);
+  };
+
+  const toggleRepExclusion = (repName) => {
+    const excluded = localSettings.excludedReps || [];
+    if (excluded.includes(repName)) {
+      setLocalSettings({
+        ...localSettings,
+        excludedReps: excluded.filter(n => n !== repName)
+      });
+    } else {
+      setLocalSettings({
+        ...localSettings,
+        excludedReps: [...excluded, repName]
+      });
+    }
   };
 
   if (!isOpen) return null;
@@ -234,6 +250,38 @@ const SettingsPanel = ({ isOpen, onClose }) => {
               </div>
             </div>
           </div>
+
+          {/* Sales Reps Filter */}
+          {availableReps.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Leaderboard Reps</h3>
+              <p className="text-xs text-gray-400 mb-3">Uncheck reps to hide them from the leaderboard</p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {availableReps.map((rep) => {
+                  const isExcluded = (localSettings.excludedReps || []).includes(rep.name);
+                  return (
+                    <label
+                      key={rep.repId}
+                      className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                        isExcluded ? 'bg-gray-50 opacity-60' : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!isExcluded}
+                        onChange={() => toggleRepExclusion(rep.name)}
+                        className="w-4 h-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
+                      />
+                      <Avatar initials={rep.initials} color={rep.color} size={32} photoUrl={rep.photoUrl} />
+                      <span className={`text-sm ${isExcluded ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                        {rep.name}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Colors */}
           <div>
@@ -370,8 +418,9 @@ const TargetRing = ({ current, goal, label }) => {
     requestAnimationFrame(animate);
   }, [percentage]);
 
-  const size = 180;
-  const strokeWidth = 18;
+  // Larger ring size
+  const size = 220;
+  const strokeWidth = 22;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
@@ -506,28 +555,28 @@ const TargetRing = ({ current, goal, label }) => {
 
   return (
     <Card className="p-6 h-full flex flex-col overflow-hidden">
-      <h2 className="text-lg font-semibold text-gray-800 mb-3">{label}</h2>
+      <h2 className="text-xl font-semibold text-gray-800 mb-2">{label}</h2>
 
-      <div className="flex-1 flex items-center gap-5">
-        {/* Left side - Stats */}
+      <div className="flex-1 flex items-center gap-6">
+        {/* Left side - Stats (larger text) */}
         <div className="flex-shrink-0 min-w-0">
-          <div className="mb-3">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">REVENUE</p>
-            <p className="text-2xl font-bold" style={{ color: mainColor }}>
+          <div className="mb-4">
+            <p className="text-sm font-medium text-gray-400 uppercase tracking-wide mb-1">REVENUE</p>
+            <p className="text-4xl font-bold" style={{ color: mainColor }}>
               {formatCurrency(animatedValue)}
             </p>
           </div>
 
-          <div className="mb-3">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">GOAL</p>
-            <p className="text-lg font-semibold text-gray-700">
+          <div className="mb-4">
+            <p className="text-sm font-medium text-gray-400 uppercase tracking-wide mb-1">GOAL</p>
+            <p className="text-2xl font-semibold text-gray-700">
               {formatCurrency(goal)}
             </p>
           </div>
 
           {exceededGoal && (
             <span
-              className="inline-block px-3 py-1 rounded-full text-xs font-semibold"
+              className="inline-block px-4 py-1.5 rounded-full text-sm font-semibold"
               style={{ backgroundColor: '#D1FAE5', color: '#059669' }}
             >
               {multiplier}x GOAL
@@ -535,14 +584,14 @@ const TargetRing = ({ current, goal, label }) => {
           )}
         </div>
 
-        {/* Right side - Ring */}
+        {/* Right side - Ring (larger) */}
         <div className="flex-1 flex justify-center items-center">
           <div className="relative" style={{ width: size, height: size }}>
             <svg width={size} height={size}>
               {renderRings()}
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-2xl font-bold" style={{ color: mainColor }}>
+              <span className="text-3xl font-bold" style={{ color: mainColor }}>
                 {Math.round(animatedPercentage)}%
               </span>
             </div>
@@ -589,10 +638,13 @@ const TopDeals = ({ thisWeek, lastWeek }) => {
 };
 
 // ============ SALES LEADERBOARD - STACKED BAR CHART (CW + AE) ============
-const SalesLeaderboard = ({ data, loading }) => {
+const SalesLeaderboard = ({ data, loading, availableHeight }) => {
   const { settings } = useSettings();
 
-  if (loading || !data || data.length === 0) {
+  // Filter out excluded reps
+  const filteredData = data ? data.filter(rep => !settings.excludedReps?.includes(rep.name)) : [];
+
+  if (loading || !data || filteredData.length === 0) {
     return (
       <Card className="p-5 h-full flex flex-col">
         <div className="flex justify-between items-center mb-4">
@@ -611,13 +663,28 @@ const SalesLeaderboard = ({ data, loading }) => {
     );
   }
 
-  const sortedData = [...data].sort((a, b) => b.currentMonth - a.currentMonth);
+  const sortedData = [...filteredData].sort((a, b) => b.currentMonth - a.currentMonth);
   const maxValue = Math.max(...sortedData.map(d => Math.max(d.currentMonth, d.lastMonth)));
   const topPerformer = sortedData[0];
 
   // Colors for stacked bars
   const cwColor = settings.primaryColor; // Purple for CW Sourced
   const aeColor = settings.accentColor;  // Teal for AE Sourced
+
+  // Dynamic scaling based on number of reps
+  // Base height is 52px (44px bar + 8px gap), max is 15% larger (60px)
+  // Min height scales down as more reps are added
+  const repCount = sortedData.length;
+  const headerHeight = 52; // Title + dropdown area
+  const legendHeight = 48; // Legend at bottom
+  const containerPadding = 40; // p-5 = 20px * 2
+  const availableForBars = (availableHeight || 400) - headerHeight - legendHeight - containerPadding;
+
+  // Calculate ideal bar height - max 60px, min 32px
+  const idealBarHeight = Math.min(60, Math.max(32, availableForBars / repCount - 8));
+  const avatarSize = Math.min(48, Math.max(32, idealBarHeight - 4));
+  const barHeight = idealBarHeight - 6;
+  const gap = Math.min(12, Math.max(4, (availableForBars - (idealBarHeight * repCount)) / (repCount - 1 || 1)));
 
   return (
     <Card className="p-5 h-full flex flex-col">
@@ -630,7 +697,7 @@ const SalesLeaderboard = ({ data, loading }) => {
         </select>
       </div>
 
-      <div className="flex-1 flex flex-col justify-start gap-3 overflow-y-auto">
+      <div className="flex-1 flex flex-col justify-evenly" style={{ gap: `${gap}px` }}>
         {sortedData.map((rep) => {
           const isTop = rep.repId === topPerformer.repId;
           const lastMonthWidthPercent = (rep.lastMonth / maxValue) * 100;
@@ -644,15 +711,18 @@ const SalesLeaderboard = ({ data, loading }) => {
             <div key={rep.repId} className="flex items-center gap-3">
               {/* Avatar with trophy for top */}
               <div className="relative flex-shrink-0">
-                <Avatar initials={rep.initials} color={rep.color} size={42} photoUrl={rep.photoUrl} />
+                <Avatar initials={rep.initials} color={rep.color} size={avatarSize} photoUrl={rep.photoUrl} />
                 {isTop && (
                   <span className="absolute -top-2 -right-1 text-sm">🏆</span>
                 )}
               </div>
 
-              {/* Bar container */}
-              <div className="flex-1 h-11 relative rounded-xl overflow-hidden bg-gray-50">
-                {/* Last month bar (grey) - always show as reference */}
+              {/* Bar container - NO background grey, just transparent */}
+              <div
+                className="flex-1 relative rounded-xl overflow-hidden"
+                style={{ height: `${barHeight}px` }}
+              >
+                {/* Last month bar (light grey) - no full-width background */}
                 <div
                   className="absolute inset-y-0 left-0 rounded-xl"
                   style={{
@@ -689,7 +759,7 @@ const SalesLeaderboard = ({ data, loading }) => {
                 {/* Value label overlay */}
                 <div
                   className="absolute inset-y-0 left-0 flex items-center justify-end pr-4 pointer-events-none"
-                  style={{ width: `${totalCurrentPercent}%` }}
+                  style={{ width: `${Math.max(totalCurrentPercent, 15)}%` }}
                 >
                   <span className="text-white text-sm font-semibold drop-shadow-sm">
                     {formatCurrency(rep.currentMonth)}
@@ -808,6 +878,19 @@ function DashboardContent() {
     minThreshold: settings.topDealsMinThreshold
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [leaderboardHeight, setLeaderboardHeight] = useState(400);
+
+  // Measure available height for leaderboard
+  useEffect(() => {
+    const updateHeight = () => {
+      // Calculate: viewport height - top row (300px) - padding (40px) - gap (16px) - bottom margin for last updated (24px)
+      const available = window.innerHeight - 300 - 40 - 16 - 24;
+      setLeaderboardHeight(Math.max(300, available));
+    };
+    updateHeight();
+    window.addEventListener('resize', updateHeight);
+    return () => window.removeEventListener('resize', updateHeight);
+  }, []);
 
   // Use real data if available, otherwise fall back to mock
   const dashboardData = data || MOCK_DATA;
@@ -824,16 +907,9 @@ function DashboardContent() {
 
   return (
     <div
-      className="w-screen h-screen p-5 overflow-hidden"
+      className="w-screen h-screen p-5 pb-8 overflow-hidden relative"
       style={{ backgroundColor: settings.backgroundColor }}
     >
-      {/* Last updated indicator */}
-      {lastUpdated && (
-        <div className="absolute top-2 right-4 text-xs text-gray-400">
-          Last updated: {lastUpdated.toLocaleTimeString()}
-        </div>
-      )}
-
       {/* Error banner */}
       {error && !loading && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center justify-between">
@@ -871,15 +947,30 @@ function DashboardContent() {
 
         {/* Row 2: Leaderboard (2 cols) + News */}
         <div style={{ gridColumn: 'span 2' }}>
-          <SalesLeaderboard data={dashboardData.salesReps} loading={loading && !data} />
+          <SalesLeaderboard
+            data={dashboardData.salesReps}
+            loading={loading && !data}
+            availableHeight={leaderboardHeight}
+          />
         </div>
 
         <SalesNews articles={dashboardData.news} loading={loading} onRefresh={refresh} />
       </div>
 
+      {/* Last updated indicator - bottom center */}
+      {lastUpdated && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-xs text-gray-400">
+          Last updated: {lastUpdated.toLocaleTimeString()}
+        </div>
+      )}
+
       {/* Settings Button & Panel */}
       <SettingsButton onClick={() => setSettingsOpen(true)} />
-      <SettingsPanel isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsPanel
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        availableReps={dashboardData.salesReps}
+      />
     </div>
   );
 }
