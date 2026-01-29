@@ -119,55 +119,71 @@ function formatTimestamp(date: Date): string {
 }
 
 async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
-  // Query ALL items on the board where Date Signed is not empty
-  // This finds deals across all groups/statuses that have been signed
-  const query = `
-    query {
-      boards(ids: [${DEALS_BOARD_ID}]) {
-        items_page(
-          limit: 500,
-          query_params: {
-            rules: [
-              { column_id: "date4__1", compare_value: [""], operator: is_not_empty }
-            ]
-          }
-        ) {
-          cursor
-          items {
-            id
-            name
-            column_values(ids: ["deal_owner", "deal_value", "date4__1", "color_mm01fk8y", "connect_boards5__1"]) {
+  // Fetch items with pagination - a deal is "won" if Date Signed is populated
+  const allItems: MondayItem[] = [];
+  let cursor: string | null = null;
+
+  do {
+    const query = `
+      query ($cursor: String) {
+        boards(ids: [${DEALS_BOARD_ID}]) {
+          items_page(limit: 500, cursor: $cursor) {
+            cursor
+            items {
               id
-              text
-              value
+              name
+              column_values(ids: ["deal_owner", "deal_value", "date4__1", "color_mm01fk8y", "connect_boards5__1"]) {
+                id
+                text
+                value
+              }
             }
           }
         }
       }
+    `;
+
+    const response = await fetch(MONDAY_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': apiToken,
+        'API-Version': '2024-10'
+      },
+      body: JSON.stringify({
+        query,
+        variables: { cursor }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Monday API error: ${response.status}`);
     }
-  `;
 
-  const response = await fetch(MONDAY_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': apiToken,
-      'API-Version': '2024-10'
-    },
-    body: JSON.stringify({ query })
-  });
+    const data = await response.json();
 
-  if (!response.ok) {
-    throw new Error(`Monday API error: ${response.status}`);
-  }
+    if (data.errors) {
+      throw new Error(`Monday GraphQL error: ${JSON.stringify(data.errors)}`);
+    }
 
-  const data = await response.json();
+    const itemsPage = data.data?.boards?.[0]?.items_page;
+    const items = itemsPage?.items || [];
 
-  if (data.errors) {
-    throw new Error(`Monday GraphQL error: ${JSON.stringify(data.errors)}`);
-  }
+    // Filter to only items where Date Signed (date4__1) is populated
+    const signedItems = items.filter((item: MondayItem) => {
+      const dateSignedCol = item.column_values.find(c => c.id === 'date4__1');
+      return dateSignedCol?.text && dateSignedCol.text.trim() !== '';
+    });
 
-  return data.data?.boards?.[0]?.items_page?.items || [];
+    allItems.push(...signedItems);
+    cursor = itemsPage?.cursor || null;
+
+    // Safety limit - stop after fetching too many pages
+    if (allItems.length > 5000) break;
+
+  } while (cursor);
+
+  return allItems;
 }
 
 function processData(items: MondayItem[], monthlyGoal: number): DashboardData {
