@@ -267,7 +267,7 @@ async function fetchMondayDataFallback(apiToken: string): Promise<MondayItem[]> 
   const allItems: MondayItem[] = [];
   let cursor: string | null = null;
   let pageCount = 0;
-  const maxPages = 3; // Limit to 3 pages (1500 items) to avoid timeout
+  const maxPages = 5; // Limit to 5 pages (2500 items) to balance data completeness vs timeout
 
   const twoMonthsAgo = new Date();
   twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
