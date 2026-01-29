@@ -23,6 +23,8 @@ interface DashboardData {
     initials: string;
     color: string;
     currentMonth: number;
+    currentMonthCW: number;
+    currentMonthAE: number;
     lastMonth: number;
   }>;
   topDeals: {
@@ -191,6 +193,8 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
   const repMap = new Map<string, {
     name: string;
     currentMonth: number;
+    currentMonthCW: number;
+    currentMonthAE: number;
     lastMonth: number;
     deals: Array<{ company: string; value: number; dateSigned: Date }>;
   }>();
@@ -228,7 +232,7 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
 
     // Update rep totals
     if (!repMap.has(repName)) {
-      repMap.set(repName, { name: repName, currentMonth: 0, lastMonth: 0, deals: [] });
+      repMap.set(repName, { name: repName, currentMonth: 0, currentMonthCW: 0, currentMonthAE: 0, lastMonth: 0, deals: [] });
     }
     const rep = repMap.get(repName)!;
 
@@ -238,8 +242,10 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
       // Categorize by lead source type - default to CW Sourced unless explicitly AE Sourced
       if (leadSourceType === 'AE Sourced') {
         aeSourcedCurrentMonth += dealValue;
+        rep.currentMonthAE += dealValue;
       } else {
         cwSourcedCurrentMonth += dealValue;
+        rep.currentMonthCW += dealValue;
       }
     } else if (isLastMonth(dateSigned)) {
       rep.lastMonth += dealValue;
@@ -277,6 +283,8 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
       initials: getInitials(rep.name),
       color: getRepColor(repColorIndex++),
       currentMonth: Math.round(rep.currentMonth),
+      currentMonthCW: Math.round(rep.currentMonthCW),
+      currentMonthAE: Math.round(rep.currentMonthAE),
       lastMonth: Math.round(rep.lastMonth)
     }));
 
@@ -381,11 +389,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Cache for 5 minutes
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
 
-    // Add debug info
+    // Add debug info - check for scope column
+    const itemsWithScope = items.filter(item => {
+      const scopeCol = item.column_values.find(c => c.id === 'link_to___scopes____1');
+      return scopeCol?.text && scopeCol.text.trim() !== '';
+    });
+
+    // Find recent items (this week or last week) with scopes
+    const now = new Date();
+    const startOfThisWeek = new Date(now);
+    startOfThisWeek.setDate(now.getDate() - now.getDay());
+    startOfThisWeek.setHours(0, 0, 0, 0);
+    const startOfLastWeek = new Date(startOfThisWeek);
+    startOfLastWeek.setDate(startOfLastWeek.getDate() - 7);
+
+    const recentItemsWithScope = items.filter(item => {
+      const dateSignedCol = item.column_values.find(c => c.id === 'date4__1');
+      const scopeCol = item.column_values.find(c => c.id === 'link_to___scopes____1');
+      const valueCol = item.column_values.find(c => c.id === 'deal_value');
+      const dateSigned = parseDate(dateSignedCol?.text ?? null);
+      const hasScope = scopeCol?.text && scopeCol.text.trim() !== '';
+      const dealValue = parseFloat(valueCol?.text || '0') || 0;
+
+      if (!dateSigned) return false;
+      const isRecent = dateSigned >= startOfLastWeek;
+      return isRecent && hasScope && dealValue >= topDealsMinThreshold;
+    });
+
     return res.status(200).json({
       ...data,
       _debug: {
         totalItemsWithDateSigned: items.length,
+        itemsWithScope: itemsWithScope.length,
+        topDealsMinThreshold,
+        recentItemsWithScopeCount: recentItemsWithScope.length,
+        recentItemsWithScope: recentItemsWithScope.slice(0, 5).map(item => ({
+          name: item.name,
+          scope: item.column_values.find(c => c.id === 'link_to___scopes____1')?.text,
+          value: item.column_values.find(c => c.id === 'deal_value')?.text,
+          dateSigned: item.column_values.find(c => c.id === 'date4__1')?.text
+        })),
         sampleItem: items[0] ? {
           name: items[0].name,
           columns: items[0].column_values.map(c => ({ id: c.id, text: c.text }))

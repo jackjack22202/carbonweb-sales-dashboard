@@ -295,14 +295,17 @@ const SettingsButton = ({ onClick }) => {
       className="fixed bottom-4 right-4 z-40"
       onMouseEnter={() => setIsVisible(true)}
       onMouseLeave={() => setIsVisible(false)}
+      style={{ width: '80px', height: '80px' }}
     >
+      {/* Invisible hover area that's always active */}
+      <div className="absolute inset-0" />
+      {/* Button positioned in center-right of hover area */}
       <button
         onClick={onClick}
-        className={`p-3 rounded-full bg-white shadow-lg transition-all duration-300 ${
+        className={`absolute bottom-2 right-2 p-3 rounded-full bg-white shadow-lg transition-all duration-300 ${
           isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
         } hover:bg-gray-50`}
         style={{
-          pointerEvents: isVisible ? 'auto' : 'none',
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
         }}
       >
@@ -311,11 +314,6 @@ const SettingsButton = ({ onClick }) => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       </button>
-      {/* Invisible hover area */}
-      <div
-        className="absolute bottom-0 right-0 w-20 h-20"
-        style={{ pointerEvents: 'auto' }}
-      />
     </div>
   );
 };
@@ -569,7 +567,7 @@ const TopDeals = ({ thisWeek, lastWeek }) => {
   );
 };
 
-// ============ SALES LEADERBOARD - GREY LAST MONTH BAR ============
+// ============ SALES LEADERBOARD - STACKED BAR CHART (CW + AE) ============
 const SalesLeaderboard = ({ data, loading }) => {
   const { settings } = useSettings();
 
@@ -596,6 +594,10 @@ const SalesLeaderboard = ({ data, loading }) => {
   const maxValue = Math.max(...sortedData.map(d => Math.max(d.currentMonth, d.lastMonth)));
   const topPerformer = sortedData[0];
 
+  // Colors for stacked bars
+  const cwColor = settings.primaryColor; // Purple for CW Sourced
+  const aeColor = settings.accentColor;  // Teal for AE Sourced
+
   return (
     <Card className="p-5 h-full flex flex-col">
       <div className="flex justify-between items-center mb-4">
@@ -610,8 +612,12 @@ const SalesLeaderboard = ({ data, loading }) => {
       <div className="flex-1 flex flex-col justify-start gap-3 overflow-y-auto">
         {sortedData.map((rep) => {
           const isTop = rep.repId === topPerformer.repId;
-          const currentWidthPercent = (rep.currentMonth / maxValue) * 100;
           const lastMonthWidthPercent = (rep.lastMonth / maxValue) * 100;
+
+          // Calculate stacked bar widths
+          const cwWidthPercent = ((rep.currentMonthCW || 0) / maxValue) * 100;
+          const aeWidthPercent = ((rep.currentMonthAE || 0) / maxValue) * 100;
+          const totalCurrentPercent = cwWidthPercent + aeWidthPercent;
 
           return (
             <div key={rep.repId} className="flex items-center gap-3">
@@ -634,15 +640,37 @@ const SalesLeaderboard = ({ data, loading }) => {
                   }}
                 />
 
-                {/* Current month bar (purple) */}
+                {/* Stacked current month bars */}
                 <div
-                  className="absolute inset-y-0 left-0 rounded-xl transition-all duration-1000 ease-out flex items-center justify-end pr-4"
-                  style={{
-                    width: `${currentWidthPercent}%`,
-                    background: `linear-gradient(90deg, ${settings.primaryColor}, ${settings.primaryColor}aa)`,
-                  }}
+                  className="absolute inset-y-0 left-0 flex rounded-xl overflow-hidden transition-all duration-1000 ease-out"
+                  style={{ width: `${totalCurrentPercent}%` }}
                 >
-                  <span className="text-white text-sm font-semibold">
+                  {/* CW Sourced portion (purple) */}
+                  {cwWidthPercent > 0 && (
+                    <div
+                      style={{
+                        width: `${(cwWidthPercent / totalCurrentPercent) * 100}%`,
+                        backgroundColor: cwColor,
+                      }}
+                    />
+                  )}
+                  {/* AE Sourced portion (teal) */}
+                  {aeWidthPercent > 0 && (
+                    <div
+                      style={{
+                        width: `${(aeWidthPercent / totalCurrentPercent) * 100}%`,
+                        backgroundColor: aeColor,
+                      }}
+                    />
+                  )}
+                </div>
+
+                {/* Value label overlay */}
+                <div
+                  className="absolute inset-y-0 left-0 flex items-center justify-end pr-4 pointer-events-none"
+                  style={{ width: `${totalCurrentPercent}%` }}
+                >
+                  <span className="text-white text-sm font-semibold drop-shadow-sm">
                     {formatCurrency(rep.currentMonth)}
                   </span>
                 </div>
@@ -655,11 +683,15 @@ const SalesLeaderboard = ({ data, loading }) => {
       {/* Legend */}
       <div className="flex gap-4 justify-center pt-3 border-t border-gray-100 mt-3">
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded" style={{ background: `linear-gradient(90deg, ${settings.primaryColor}, ${settings.primaryColor}aa)` }} />
-          <span className="text-xs text-gray-500">{getCurrentMonth()}</span>
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: cwColor }} />
+          <span className="text-xs text-gray-500">CW Sourced</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded" style={{ backgroundColor: '#E5E7EB' }} />
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: aeColor }} />
+          <span className="text-xs text-gray-500">AE Sourced</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: '#D1D5DB' }} />
           <span className="text-xs text-gray-500">Last Month</span>
         </div>
       </div>

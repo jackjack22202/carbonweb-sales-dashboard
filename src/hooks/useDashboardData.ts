@@ -6,6 +6,8 @@ export interface SalesRep {
   initials: string;
   color: string;
   currentMonth: number;
+  currentMonthCW: number;
+  currentMonthAE: number;
   lastMonth: number;
 }
 
