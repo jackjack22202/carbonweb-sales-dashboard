@@ -139,7 +139,7 @@ interface MondayUser {
 async function fetchUsers(apiToken: string): Promise<Map<number, MondayUser>> {
   const query = `
     query {
-      users {
+      users (limit: 100) {
         id
         name
         photo_thumb
@@ -147,29 +147,41 @@ async function fetchUsers(apiToken: string): Promise<Map<number, MondayUser>> {
     }
   `;
 
-  const response = await fetch(MONDAY_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': apiToken,
-      'API-Version': '2024-10'
-    },
-    body: JSON.stringify({ query })
-  });
+  try {
+    const response = await fetch(MONDAY_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': apiToken,
+        'API-Version': '2024-10'
+      },
+      body: JSON.stringify({ query })
+    });
 
-  if (!response.ok) {
-    throw new Error(`Monday API error fetching users: ${response.status}`);
+    if (!response.ok) {
+      console.error(`Monday API error fetching users: ${response.status}`);
+      return new Map();
+    }
+
+    const data = await response.json();
+
+    if (data.errors) {
+      console.error('Monday GraphQL error fetching users:', data.errors);
+      return new Map();
+    }
+
+    const users = data.data?.users || [];
+
+    const userMap = new Map<number, MondayUser>();
+    for (const user of users) {
+      userMap.set(parseInt(user.id), user);
+    }
+
+    return userMap;
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    return new Map();
   }
-
-  const data = await response.json();
-  const users = data.data?.users || [];
-
-  const userMap = new Map<number, MondayUser>();
-  for (const user of users) {
-    userMap.set(parseInt(user.id), user);
-  }
-
-  return userMap;
 }
 
 async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
