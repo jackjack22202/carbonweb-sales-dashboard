@@ -143,7 +143,7 @@ interface MondayUser {
 }
 
 // Fetch all users to get their photo URLs
-async function fetchUsers(apiToken: string): Promise<Map<number, MondayUser>> {
+async function fetchUsers(apiToken: string): Promise<Map<string, MondayUser>> {
   const query = `
     query {
       users (limit: 100) {
@@ -179,10 +179,17 @@ async function fetchUsers(apiToken: string): Promise<Map<number, MondayUser>> {
 
     const users = data.data?.users || [];
 
-    const userMap = new Map<number, MondayUser>();
+    // Use string keys since user IDs can come as strings from the API
+    const userMap = new Map<string, MondayUser>();
     for (const user of users) {
-      userMap.set(parseInt(user.id), user);
+      // Store by both string and numeric key to handle type differences
+      userMap.set(String(user.id), user);
     }
+
+    console.log(`Loaded ${userMap.size} users from Monday API`);
+    // Log users with photos for debugging
+    const usersWithPhotos = users.filter((u: MondayUser) => u.photo_thumb).map((u: MondayUser) => u.name);
+    console.log(`Users with photos: ${usersWithPhotos.join(', ')}`);
 
     return userMap;
   } catch (error) {
@@ -326,7 +333,7 @@ async function fetchMondayDataFallback(apiToken: string): Promise<MondayItem[]> 
   return allItems;
 }
 
-function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThreshold: number, userMap: Map<number, MondayUser>): DashboardData {
+function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThreshold: number, userMap: Map<string, MondayUser>): DashboardData {
   const repMap = new Map<string, {
     name: string;
     photoUrl: string | null;
@@ -373,9 +380,14 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
         if (parsed.personsAndTeams && parsed.personsAndTeams.length > 0) {
           const person = parsed.personsAndTeams[0];
           if (person.id && person.kind === 'person') {
-            const user = userMap.get(person.id);
+            // Convert to string for consistent lookup
+            const personIdStr = String(person.id);
+            const user = userMap.get(personIdStr);
             if (user?.photo_thumb) {
               repPhotoMap.set(repName, user.photo_thumb);
+              console.log(`Found photo for ${repName}: ${user.photo_thumb.substring(0, 50)}...`);
+            } else {
+              console.log(`No photo found for ${repName} (ID: ${personIdStr}), user exists: ${!!user}, photo_thumb: ${user?.photo_thumb}`);
             }
           }
         }
