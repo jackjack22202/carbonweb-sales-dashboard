@@ -154,7 +154,7 @@ async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
   let cursor: string | null = null;
 
   do {
-    // Query ALL column values to see what's available
+    // Query only the specific columns we need for performance
     const query = `
       query ($cursor: String) {
         boards(ids: [${DEALS_BOARD_ID}]) {
@@ -163,7 +163,7 @@ async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
             items {
               id
               name
-              column_values {
+              column_values(ids: ["deal_owner", "deal_value", "date4__1", "color_mm01fk8y", "connect_boards5__1", "link_to___scopes____1"]) {
                 id
                 text
                 value
@@ -423,9 +423,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Get threshold from query parameter (sent from client settings)
     const topDealsMinThreshold = parseInt(req.query.minThreshold as string || '0', 10);
 
-    // Fetch board columns to find correct column IDs
-    const columns = await fetchBoardColumns(apiToken);
-
     const items = await fetchMondayData(apiToken);
     const data = processData(items, monthlyGoal, topDealsMinThreshold);
 
@@ -492,34 +489,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         topDealsMinThreshold,
         recentItemsCount: recentItems.length,
         recentItemsWithScopeCount: recentItemsWithScope.length,
-        leadSourceValuesFound: Array.from(leadSourceValues),
-        recentItemsSample: recentItems.slice(0, 3).map(item => ({
-          name: item.name,
-          scope: item.column_values.find(c => c.id === 'link_to___scopes____1')?.text,
-          value: item.column_values.find(c => c.id === 'deal_value')?.text,
-          dateSigned: item.column_values.find(c => c.id === 'date4__1')?.text,
-          leadSource: item.column_values.find(c => c.id === 'color_mm01fk8y')?.text
-        })),
-        sampleItem: items[0] ? {
-          name: items[0].name,
-          columns: items[0].column_values.map(c => ({ id: c.id, text: c.text, value: c.value }))
-        } : null,
-        // Check scope column value field (it's a board_relation)
-        scopeColumnSample: items.slice(0, 10).map(item => {
-          const scopeCol = item.column_values.find(c => c.id === 'link_to___scopes____1');
-          return {
-            name: item.name.split('\n')[0],
-            scopeText: scopeCol?.text,
-            scopeValue: scopeCol?.value
-          };
-        }),
-        boardColumns: columns.filter(c =>
-          c.title.toLowerCase().includes('scope') ||
-          c.title.toLowerCase().includes('source') ||
-          c.title.toLowerCase().includes('ae') ||
-          c.title.toLowerCase().includes('cw') ||
-          c.type === 'board_relation'
-        )
+        leadSourceValuesFound: Array.from(leadSourceValues)
       }
     });
   } catch (error) {
