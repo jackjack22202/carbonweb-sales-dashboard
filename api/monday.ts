@@ -2,7 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const MONDAY_API_URL = 'https://api.monday.com/v2';
 const DEALS_BOARD_ID = '6385549292';
-const WON_DEALS_GROUP_ID = 'new_group83934';
+// Note: We query ALL deals on the board, not just a specific group
+// A deal is considered "won" if it has a Date Signed (date4__1) populated
 
 interface MondayItem {
   id: string;
@@ -118,19 +119,27 @@ function formatTimestamp(date: Date): string {
 }
 
 async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
+  // Query ALL items on the board where Date Signed is not empty
+  // This finds deals across all groups/statuses that have been signed
   const query = `
     query {
       boards(ids: [${DEALS_BOARD_ID}]) {
-        groups(ids: ["${WON_DEALS_GROUP_ID}"]) {
-          items_page(limit: 500) {
-            items {
+        items_page(
+          limit: 500,
+          query_params: {
+            rules: [
+              { column_id: "date4__1", compare_value: [""], operator: is_not_empty }
+            ]
+          }
+        ) {
+          cursor
+          items {
+            id
+            name
+            column_values(ids: ["deal_owner", "deal_value", "date4__1", "color_mm01fk8y", "connect_boards5__1"]) {
               id
-              name
-              column_values(ids: ["deal_owner", "deal_value", "date4__1", "color_mm01fk8y", "connect_boards5__1"]) {
-                id
-                text
-                value
-              }
+              text
+              value
             }
           }
         }
@@ -158,7 +167,7 @@ async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
     throw new Error(`Monday GraphQL error: ${JSON.stringify(data.errors)}`);
   }
 
-  return data.data?.boards?.[0]?.groups?.[0]?.items_page?.items || [];
+  return data.data?.boards?.[0]?.items_page?.items || [];
 }
 
 function processData(items: MondayItem[], monthlyGoal: number): DashboardData {
