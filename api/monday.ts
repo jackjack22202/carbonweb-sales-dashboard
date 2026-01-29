@@ -283,7 +283,18 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
 
     // Track recent deals for top deals widget
     // Only include deals that have scopes attached AND meet minimum threshold
-    const hasScope = scopeCol?.text && scopeCol.text.trim() !== '';
+    // For board_relation columns, check the value field for linkedPulseIds
+    let hasScope = false;
+    if (scopeCol?.text && scopeCol.text.trim() !== '') {
+      hasScope = true;
+    } else if (scopeCol?.value) {
+      try {
+        const parsed = JSON.parse(scopeCol.value);
+        hasScope = parsed.linkedPulseIds && parsed.linkedPulseIds.length > 0;
+      } catch {
+        hasScope = false;
+      }
+    }
     const meetsThreshold = dealValue >= topDealsMinThreshold;
 
     if ((isThisWeek(dateSigned) || isLastWeek(dateSigned)) && hasScope && meetsThreshold) {
@@ -421,11 +432,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Cache for 5 minutes
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
 
-    // Add debug info - check for scope column
-    const itemsWithScope = items.filter(item => {
+    // Helper to check if scope column has linked items
+    const hasScopeLinked = (item: MondayItem): boolean => {
       const scopeCol = item.column_values.find(c => c.id === 'link_to___scopes____1');
-      return scopeCol?.text && scopeCol.text.trim() !== '';
-    });
+      if (scopeCol?.text && scopeCol.text.trim() !== '') return true;
+      if (scopeCol?.value) {
+        try {
+          const parsed = JSON.parse(scopeCol.value);
+          return parsed.linkedPulseIds && parsed.linkedPulseIds.length > 0;
+        } catch {
+          return false;
+        }
+      }
+      return false;
+    };
+
+    // Add debug info - check for scope column
+    const itemsWithScope = items.filter(hasScopeLinked);
 
     // Find recent items (this week or last week) with scopes
     const now = new Date();
@@ -437,15 +460,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const recentItemsWithScope = items.filter(item => {
       const dateSignedCol = item.column_values.find(c => c.id === 'date4__1');
-      const scopeCol = item.column_values.find(c => c.id === 'link_to___scopes____1');
       const valueCol = item.column_values.find(c => c.id === 'deal_value');
       const dateSigned = parseDate(dateSignedCol?.text ?? null);
-      const hasScope = scopeCol?.text && scopeCol.text.trim() !== '';
       const dealValue = parseFloat(valueCol?.text || '0') || 0;
 
       if (!dateSigned) return false;
       const isRecent = dateSigned >= startOfLastWeek;
-      return isRecent && hasScope && dealValue >= topDealsMinThreshold;
+      return isRecent && hasScopeLinked(item) && dealValue >= topDealsMinThreshold;
     });
 
     // Find all unique lead source values
