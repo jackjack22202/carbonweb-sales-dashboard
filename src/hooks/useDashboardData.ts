@@ -50,11 +50,17 @@ interface UseDashboardDataResult {
   lastUpdated: Date | null;
 }
 
-const API_URL = import.meta.env.PROD
+const API_BASE_URL = import.meta.env.PROD
   ? '/api/monday'
   : (import.meta.env.VITE_API_URL || '/api/monday');
 
-export function useDashboardData(refreshInterval = 5 * 60 * 1000): UseDashboardDataResult {
+interface UseDashboardOptions {
+  refreshInterval?: number;
+  minThreshold?: number;
+}
+
+export function useDashboardData(options: UseDashboardOptions = {}): UseDashboardDataResult {
+  const { refreshInterval = 5 * 60 * 1000, minThreshold = 0 } = options;
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +71,13 @@ export function useDashboardData(refreshInterval = 5 * 60 * 1000): UseDashboardD
       setLoading(true);
       setError(null);
 
-      const response = await fetch(API_URL);
+      // Build URL with query parameters
+      const url = new URL(API_BASE_URL, window.location.origin);
+      if (minThreshold > 0) {
+        url.searchParams.set('minThreshold', minThreshold.toString());
+      }
+
+      const response = await fetch(url.toString());
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -81,7 +93,7 @@ export function useDashboardData(refreshInterval = 5 * 60 * 1000): UseDashboardD
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [minThreshold]);
 
   useEffect(() => {
     fetchData();

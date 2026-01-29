@@ -1,5 +1,61 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, createContext, useContext } from 'react';
 import { useDashboardData } from './src/hooks/useDashboardData';
+
+// ============ SETTINGS CONTEXT ============
+const defaultSettings = {
+  topDealsMinThreshold: 5000,
+  cwGoal: 100000,
+  aeGoal: 100000,
+  primaryColor: '#8B5CF6',
+  accentColor: '#14B8A6',
+  backgroundColor: '#F9FAFB'
+};
+
+const SettingsContext = createContext({
+  settings: defaultSettings,
+  updateSettings: () => {}
+});
+
+const useSettings = () => useContext(SettingsContext);
+
+// Load settings from localStorage
+const loadSettings = () => {
+  try {
+    const saved = localStorage.getItem('dashboardSettings');
+    if (saved) {
+      return { ...defaultSettings, ...JSON.parse(saved) };
+    }
+  } catch (e) {
+    console.error('Failed to load settings:', e);
+  }
+  return defaultSettings;
+};
+
+// Save settings to localStorage
+const saveSettings = (settings) => {
+  try {
+    localStorage.setItem('dashboardSettings', JSON.stringify(settings));
+  } catch (e) {
+    console.error('Failed to save settings:', e);
+  }
+};
+
+// ============ SETTINGS PROVIDER ============
+const SettingsProvider = ({ children }) => {
+  const [settings, setSettings] = useState(loadSettings);
+
+  const updateSettings = (newSettings) => {
+    const updated = { ...settings, ...newSettings };
+    setSettings(updated);
+    saveSettings(updated);
+  };
+
+  return (
+    <SettingsContext.Provider value={{ settings, updateSettings }}>
+      {children}
+    </SettingsContext.Provider>
+  );
+};
 
 // ============ FALLBACK MOCK DATA (used when API is unavailable) ============
 const MOCK_DATA = {
@@ -62,26 +118,213 @@ const LoadingSkeleton = () => (
   </div>
 );
 
-// ============ ERROR DISPLAY ============
-const ErrorDisplay = ({ message, onRetry }) => (
-  <div className="flex flex-col items-center justify-center h-full text-center p-4">
-    <span className="text-4xl mb-2">⚠️</span>
-    <p className="text-gray-600 mb-4">{message}</p>
-    <button
-      onClick={onRetry}
-      className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+// ============ SETTINGS PANEL ============
+const SettingsPanel = ({ isOpen, onClose }) => {
+  const { settings, updateSettings } = useSettings();
+  const [localSettings, setLocalSettings] = useState(settings);
+
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings, isOpen]);
+
+  const handleSave = () => {
+    updateSettings(localSettings);
+    onClose();
+  };
+
+  const handleReset = () => {
+    setLocalSettings(defaultSettings);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Panel */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+          <h2 className="text-xl font-semibold text-gray-800">Dashboard Settings</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto max-h-[60vh] space-y-6">
+          {/* Top Deals Settings */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Top Deals</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Minimum Deal Threshold</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                  <input
+                    type="number"
+                    value={localSettings.topDealsMinThreshold}
+                    onChange={(e) => setLocalSettings({ ...localSettings, topDealsMinThreshold: parseInt(e.target.value) || 0 })}
+                    className="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Only deals with scopes above this amount will appear</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Monthly Goals */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Monthly Goals</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">CW Sourced Goal</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                  <input
+                    type="number"
+                    value={localSettings.cwGoal}
+                    onChange={(e) => setLocalSettings({ ...localSettings, cwGoal: parseInt(e.target.value) || 0 })}
+                    className="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">AE Sourced Goal</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                  <input
+                    type="number"
+                    value={localSettings.aeGoal}
+                    onChange={(e) => setLocalSettings({ ...localSettings, aeGoal: parseInt(e.target.value) || 0 })}
+                    className="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Colors */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Colors</h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Primary</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={localSettings.primaryColor}
+                    onChange={(e) => setLocalSettings({ ...localSettings, primaryColor: e.target.value })}
+                    className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer"
+                  />
+                  <span className="text-xs text-gray-400">{localSettings.primaryColor}</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Accent</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={localSettings.accentColor}
+                    onChange={(e) => setLocalSettings({ ...localSettings, accentColor: e.target.value })}
+                    className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer"
+                  />
+                  <span className="text-xs text-gray-400">{localSettings.accentColor}</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Background</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={localSettings.backgroundColor}
+                    onChange={(e) => setLocalSettings({ ...localSettings, backgroundColor: e.target.value })}
+                    className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer"
+                  />
+                  <span className="text-xs text-gray-400">{localSettings.backgroundColor}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between p-6 border-t border-gray-100 bg-gray-50">
+          <button
+            onClick={handleReset}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+          >
+            Reset to Defaults
+          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 text-sm text-white bg-purple-500 hover:bg-purple-600 rounded-lg transition-colors"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============ HIDDEN SETTINGS BUTTON ============
+const SettingsButton = ({ onClick }) => {
+  const [isVisible, setIsVisible] = useState(false);
+
+  return (
+    <div
+      className="fixed bottom-4 right-4 z-40"
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
     >
-      Retry
-    </button>
-  </div>
-);
+      <button
+        onClick={onClick}
+        className={`p-3 rounded-full bg-white shadow-lg transition-all duration-300 ${
+          isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
+        } hover:bg-gray-50`}
+        style={{
+          pointerEvents: isVisible ? 'auto' : 'none',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+        }}
+      >
+        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      </button>
+      {/* Invisible hover area */}
+      <div
+        className="absolute bottom-0 right-0 w-20 h-20"
+        style={{ pointerEvents: 'auto' }}
+      />
+    </div>
+  );
+};
 
 // ============ TARGET RING WIDGET - ANIMATED LAPS WITH APPLE WATCH OVERLAP ============
 const TargetRing = ({ current, goal, label }) => {
+  const { settings } = useSettings();
   const [animatedPercentage, setAnimatedPercentage] = useState(0);
   const percentage = (current / goal) * 100;
-  const totalLaps = Math.floor(percentage / 100);
-  const finalRemainder = percentage % 100;
 
   // Unique ID for this widget's SVG filters
   const filterId = React.useMemo(() => `ring-${Math.random().toString(36).substr(2, 9)}`, []);
@@ -116,8 +359,8 @@ const TargetRing = ({ current, goal, label }) => {
   const displayLaps = Math.floor(animatedPercentage / 100);
   const displayRemainder = animatedPercentage % 100;
 
-  const mainColor = '#14B8A6';
-  const darkerColor = '#0D9488';
+  const mainColor = settings.accentColor;
+  const darkerColor = settings.accentColor;
   const exceededGoal = animatedPercentage >= 100;
   const multiplier = Math.floor(animatedPercentage / 100);
 
@@ -155,7 +398,6 @@ const TargetRing = ({ current, goal, label }) => {
     );
 
     // Draw underlying completed lap layers - fixed number to prevent shake
-    // Pre-render up to 10 lap layers (more than enough for most cases)
     const maxLapLayers = 10;
     for (let i = 0; i < maxLapLayers; i++) {
       const layerOpacity = i < displayLaps ? Math.min(0.4 + (i * 0.1), 0.8) : 0;
@@ -206,7 +448,7 @@ const TargetRing = ({ current, goal, label }) => {
     const endX = cx + radius * Math.cos((endAngle - 90) * Math.PI / 180);
     const endY = cy + radius * Math.sin((endAngle - 90) * Math.PI / 180);
 
-    // Shadow for end cap - subtle, fits within bar
+    // Shadow for end cap
     rings.push(
       <circle
         key="end-cap-shadow"
@@ -269,7 +511,7 @@ const TargetRing = ({ current, goal, label }) => {
               className="inline-block px-3 py-1 rounded-full text-xs font-semibold"
               style={{ backgroundColor: '#D1FAE5', color: '#059669' }}
             >
-              {multiplier}x GOAL 🔥
+              {multiplier}x GOAL
             </span>
           )}
         </div>
@@ -309,7 +551,7 @@ const TopDeals = ({ thisWeek, lastWeek }) => {
       ) : (
         <div className="flex-1 flex items-center justify-center text-gray-400">
           <span className="text-2xl mr-2">📭</span>
-          <p className="text-sm">No deals this week</p>
+          <p className="text-sm">No qualifying deals</p>
         </div>
       )}
     </div>
@@ -329,6 +571,8 @@ const TopDeals = ({ thisWeek, lastWeek }) => {
 
 // ============ SALES LEADERBOARD - GREY LAST MONTH BAR ============
 const SalesLeaderboard = ({ data, loading }) => {
+  const { settings } = useSettings();
+
   if (loading || !data || data.length === 0) {
     return (
       <Card className="p-5 h-full flex flex-col">
@@ -364,11 +608,10 @@ const SalesLeaderboard = ({ data, loading }) => {
       </div>
 
       <div className="flex-1 flex flex-col justify-start gap-3 overflow-y-auto">
-        {sortedData.map((rep, index) => {
+        {sortedData.map((rep) => {
           const isTop = rep.repId === topPerformer.repId;
           const currentWidthPercent = (rep.currentMonth / maxValue) * 100;
           const lastMonthWidthPercent = (rep.lastMonth / maxValue) * 100;
-          const beatLastMonth = rep.currentMonth >= rep.lastMonth;
 
           return (
             <div key={rep.repId} className="flex items-center gap-3">
@@ -396,7 +639,7 @@ const SalesLeaderboard = ({ data, loading }) => {
                   className="absolute inset-y-0 left-0 rounded-xl transition-all duration-1000 ease-out flex items-center justify-end pr-4"
                   style={{
                     width: `${currentWidthPercent}%`,
-                    background: 'linear-gradient(90deg, #8B5CF6, #A78BFA)',
+                    background: `linear-gradient(90deg, ${settings.primaryColor}, ${settings.primaryColor}aa)`,
                   }}
                 >
                   <span className="text-white text-sm font-semibold">
@@ -412,7 +655,7 @@ const SalesLeaderboard = ({ data, loading }) => {
       {/* Legend */}
       <div className="flex gap-4 justify-center pt-3 border-t border-gray-100 mt-3">
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded" style={{ background: 'linear-gradient(90deg, #8B5CF6, #A78BFA)' }} />
+          <div className="w-3 h-3 rounded" style={{ background: `linear-gradient(90deg, ${settings.primaryColor}, ${settings.primaryColor}aa)` }} />
           <span className="text-xs text-gray-500">{getCurrentMonth()}</span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -506,16 +749,30 @@ const SalesNews = ({ articles, loading, onRefresh }) => {
 };
 
 // ============ MAIN DASHBOARD COMPONENT ============
-export default function SalesDashboard() {
-  const { data, loading, error, refresh, lastUpdated } = useDashboardData();
+function DashboardContent() {
+  const { settings } = useSettings();
+  const { data, loading, error, refresh, lastUpdated } = useDashboardData({
+    minThreshold: settings.topDealsMinThreshold
+  });
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Use real data if available, otherwise fall back to mock
   const dashboardData = data || MOCK_DATA;
 
+  // Apply settings overrides for goals
+  const cwTarget = {
+    ...dashboardData.cwTarget,
+    goal: settings.cwGoal
+  };
+  const aeTarget = {
+    ...dashboardData.aeTarget,
+    goal: settings.aeGoal
+  };
+
   return (
     <div
       className="w-screen h-screen p-5 overflow-hidden"
-      style={{ backgroundColor: '#F9FAFB' }}
+      style={{ backgroundColor: settings.backgroundColor }}
     >
       {/* Last updated indicator */}
       {lastUpdated && (
@@ -547,10 +804,10 @@ export default function SalesDashboard() {
       >
         {/* Row 1: Two matching target rings + Top Deals - fixed height */}
         <div style={{ height: '300px' }}>
-          <TargetRing {...dashboardData.cwTarget} />
+          <TargetRing {...cwTarget} />
         </div>
         <div style={{ height: '300px' }}>
-          <TargetRing {...dashboardData.aeTarget} />
+          <TargetRing {...aeTarget} />
         </div>
         <div style={{ height: '300px' }}>
           <TopDeals
@@ -566,6 +823,18 @@ export default function SalesDashboard() {
 
         <SalesNews articles={dashboardData.news} loading={loading} onRefresh={refresh} />
       </div>
+
+      {/* Settings Button & Panel */}
+      <SettingsButton onClick={() => setSettingsOpen(true)} />
+      <SettingsPanel isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
+  );
+}
+
+export default function SalesDashboard() {
+  return (
+    <SettingsProvider>
+      <DashboardContent />
+    </SettingsProvider>
   );
 }

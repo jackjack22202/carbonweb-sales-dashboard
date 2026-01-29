@@ -133,7 +133,7 @@ async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
             items {
               id
               name
-              column_values(ids: ["deal_owner", "deal_value", "date4__1", "color_mm01fk8y", "connect_boards5__1"]) {
+              column_values(ids: ["deal_owner", "deal_value", "date4__1", "color_mm01fk8y", "connect_boards5__1", "link_to___scopes____1"]) {
                 id
                 text
                 value
@@ -187,7 +187,7 @@ async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
   return allItems;
 }
 
-function processData(items: MondayItem[], monthlyGoal: number): DashboardData {
+function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThreshold: number = 0): DashboardData {
   const repMap = new Map<string, {
     name: string;
     currentMonth: number;
@@ -213,6 +213,7 @@ function processData(items: MondayItem[], monthlyGoal: number): DashboardData {
     const dateSignedCol = item.column_values.find(c => c.id === 'date4__1');
     const leadSourceCol = item.column_values.find(c => c.id === 'color_mm01fk8y');
     const companyCol = item.column_values.find(c => c.id === 'connect_boards5__1');
+    const scopeCol = item.column_values.find(c => c.id === 'link_to___scopes____1');
 
     const repName = ownerCol?.text || 'Unknown';
     const dealValue = parseFloat(valueCol?.text || '0') || 0;
@@ -247,7 +248,11 @@ function processData(items: MondayItem[], monthlyGoal: number): DashboardData {
     rep.deals.push({ company: companyName, value: dealValue, dateSigned });
 
     // Track recent deals for top deals widget
-    if (isThisWeek(dateSigned) || isLastWeek(dateSigned)) {
+    // Only include deals that have scopes attached AND meet minimum threshold
+    const hasScope = scopeCol?.text && scopeCol.text.trim() !== '';
+    const meetsThreshold = dealValue >= topDealsMinThreshold;
+
+    if ((isThisWeek(dateSigned) || isLastWeek(dateSigned)) && hasScope && meetsThreshold) {
       recentDeals.push({
         company: companyName,
         value: dealValue,
@@ -368,8 +373,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const monthlyGoal = parseInt(process.env.MONTHLY_GOAL || '100000', 10);
+    // Get threshold from query parameter (sent from client settings)
+    const topDealsMinThreshold = parseInt(req.query.minThreshold as string || '0', 10);
     const items = await fetchMondayData(apiToken);
-    const data = processData(items, monthlyGoal);
+    const data = processData(items, monthlyGoal, topDealsMinThreshold);
 
     // Cache for 5 minutes
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
