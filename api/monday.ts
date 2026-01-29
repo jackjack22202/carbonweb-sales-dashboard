@@ -4,7 +4,14 @@ const MONDAY_API_URL = 'https://api.monday.com/v2';
 const DEALS_BOARD_ID = '6385549292';
 // Note: We query ALL deals on the board, not just a specific group
 // A deal is considered "won" if it has a Date Signed (date4__1) populated
-// Build trigger: v3
+
+// In-memory cache to avoid hitting Monday API on every request
+interface CacheEntry {
+  data: DashboardData;
+  timestamp: number;
+}
+let dataCache: CacheEntry | null = null;
+const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 
 interface MondayItem {
   id: string;
@@ -236,10 +243,19 @@ async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
     const itemsPage = data.data?.boards?.[0]?.items_page;
     const items = itemsPage?.items || [];
 
-    // Filter to only items where Date Signed (date4__1) is populated
+    // Filter to only items where Date Signed is populated AND within last 2 months
+    const twoMonthsAgo = new Date();
+    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+    twoMonthsAgo.setDate(1);
+    twoMonthsAgo.setHours(0, 0, 0, 0);
+
     const signedItems = items.filter((item: MondayItem) => {
       const dateSignedCol = item.column_values.find(c => c.id === 'date4__1');
-      return dateSignedCol?.text && dateSignedCol.text.trim() !== '';
+      if (!dateSignedCol?.text || dateSignedCol.text.trim() === '') return false;
+
+      // Only include deals from the last 2 months
+      const dateSigned = new Date(dateSignedCol.text);
+      return !isNaN(dateSigned.getTime()) && dateSigned >= twoMonthsAgo;
     });
 
     allItems.push(...signedItems);
@@ -482,6 +498,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Get threshold from query parameter (sent from client settings)
     const topDealsMinThreshold = parseInt(req.query.minThreshold as string || '0', 10);
 
+    // Check cache first (only if threshold matches default - cache doesn't vary by threshold)
+    const now = Date.now();
+    if (dataCache && (now - dataCache.timestamp) < CACHE_TTL && topDealsMinThreshold === 0) {
+      res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
+      res.setHeader('X-Cache', 'HIT');
+      return res.status(200).json(dataCache.data);
+    }
+
     // Fetch users and items in parallel for better performance
     const [userMap, items] = await Promise.all([
       fetchUsers(apiToken),
@@ -489,8 +513,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ]);
     const data = processData(items, monthlyGoal, topDealsMinThreshold, userMap);
 
-    // Cache for 5 minutes
+    // Update cache (only for default threshold)
+    if (topDealsMinThreshold === 0) {
+      dataCache = { data, timestamp: now };
+    }
+
+    // Cache for 5 minutes on CDN
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
+    res.setHeader('X-Cache', 'MISS');
 
     return res.status(200).json(data);
   } catch (error) {
