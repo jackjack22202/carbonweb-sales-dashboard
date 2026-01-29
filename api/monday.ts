@@ -121,12 +121,40 @@ function formatTimestamp(date: Date): string {
   return `${diffDays} days ago`;
 }
 
+async function fetchBoardColumns(apiToken: string): Promise<Array<{id: string, title: string, type: string}>> {
+  const query = `
+    query {
+      boards(ids: [${DEALS_BOARD_ID}]) {
+        columns {
+          id
+          title
+          type
+        }
+      }
+    }
+  `;
+
+  const response = await fetch(MONDAY_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': apiToken,
+      'API-Version': '2024-10'
+    },
+    body: JSON.stringify({ query })
+  });
+
+  const data = await response.json();
+  return data.data?.boards?.[0]?.columns || [];
+}
+
 async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
   // Fetch items with pagination - a deal is "won" if Date Signed is populated
   const allItems: MondayItem[] = [];
   let cursor: string | null = null;
 
   do {
+    // Query ALL column values to see what's available
     const query = `
       query ($cursor: String) {
         boards(ids: [${DEALS_BOARD_ID}]) {
@@ -135,7 +163,7 @@ async function fetchMondayData(apiToken: string): Promise<MondayItem[]> {
             items {
               id
               name
-              column_values(ids: ["deal_owner", "deal_value", "date4__1", "color_mm01fk8y", "connect_boards5__1", "link_to___scopes____1"]) {
+              column_values {
                 id
                 text
                 value
@@ -383,6 +411,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const monthlyGoal = parseInt(process.env.MONTHLY_GOAL || '100000', 10);
     // Get threshold from query parameter (sent from client settings)
     const topDealsMinThreshold = parseInt(req.query.minThreshold as string || '0', 10);
+
+    // Fetch board columns to find correct column IDs
+    const columns = await fetchBoardColumns(apiToken);
+
     const items = await fetchMondayData(apiToken);
     const data = processData(items, monthlyGoal, topDealsMinThreshold);
 
@@ -416,23 +448,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return isRecent && hasScope && dealValue >= topDealsMinThreshold;
     });
 
+    // Find all unique lead source values
+    const leadSourceValues = new Set<string>();
+    items.forEach(item => {
+      const leadSourceCol = item.column_values.find(c => c.id === 'color_mm01fk8y');
+      if (leadSourceCol?.text) leadSourceValues.add(leadSourceCol.text);
+    });
+
+    // Find recent items (for top deals debugging)
+    const recentItems = items.filter(item => {
+      const dateSignedCol = item.column_values.find(c => c.id === 'date4__1');
+      const dateSigned = parseDate(dateSignedCol?.text ?? null);
+      if (!dateSigned) return false;
+      return dateSigned >= startOfLastWeek;
+    });
+
     return res.status(200).json({
       ...data,
       _debug: {
         totalItemsWithDateSigned: items.length,
         itemsWithScope: itemsWithScope.length,
         topDealsMinThreshold,
+        recentItemsCount: recentItems.length,
         recentItemsWithScopeCount: recentItemsWithScope.length,
-        recentItemsWithScope: recentItemsWithScope.slice(0, 5).map(item => ({
+        leadSourceValuesFound: Array.from(leadSourceValues),
+        recentItemsSample: recentItems.slice(0, 3).map(item => ({
           name: item.name,
           scope: item.column_values.find(c => c.id === 'link_to___scopes____1')?.text,
           value: item.column_values.find(c => c.id === 'deal_value')?.text,
-          dateSigned: item.column_values.find(c => c.id === 'date4__1')?.text
+          dateSigned: item.column_values.find(c => c.id === 'date4__1')?.text,
+          leadSource: item.column_values.find(c => c.id === 'color_mm01fk8y')?.text
         })),
         sampleItem: items[0] ? {
           name: items[0].name,
           columns: items[0].column_values.map(c => ({ id: c.id, text: c.text }))
-        } : null
+        } : null,
+        boardColumns: columns.filter(c =>
+          c.title.toLowerCase().includes('scope') ||
+          c.title.toLowerCase().includes('source') ||
+          c.title.toLowerCase().includes('ae') ||
+          c.title.toLowerCase().includes('cw') ||
+          c.type === 'board_relation'
+        )
       }
     });
   } catch (error) {
