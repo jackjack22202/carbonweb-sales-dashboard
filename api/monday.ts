@@ -142,59 +142,72 @@ interface MondayUser {
   photo_thumb: string | null;
 }
 
-// Fetch all users to get their photo URLs
+// Fetch all users to get their photo URLs (with pagination to get all users)
 async function fetchUsers(apiToken: string): Promise<Map<string, MondayUser>> {
-  const query = `
-    query {
-      users (limit: 100) {
-        id
-        name
-        photo_thumb
-      }
-    }
-  `;
+  const userMap = new Map<string, MondayUser>();
+  let page = 1;
+  const maxPages = 10; // Safety limit - 1000 users max
 
   try {
-    const response = await fetch(MONDAY_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': apiToken,
-        'API-Version': '2024-10'
-      },
-      body: JSON.stringify({ query })
-    });
+    while (page <= maxPages) {
+      const query = `
+        query {
+          users (limit: 100, page: ${page}) {
+            id
+            name
+            photo_thumb
+          }
+        }
+      `;
 
-    if (!response.ok) {
-      console.error(`Monday API error fetching users: ${response.status}`);
-      return new Map();
+      const response = await fetch(MONDAY_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': apiToken,
+          'API-Version': '2024-10'
+        },
+        body: JSON.stringify({ query })
+      });
+
+      if (!response.ok) {
+        console.error(`Monday API error fetching users page ${page}: ${response.status}`);
+        break;
+      }
+
+      const data = await response.json();
+
+      if (data.errors) {
+        console.error('Monday GraphQL error fetching users:', data.errors);
+        break;
+      }
+
+      const users = data.data?.users || [];
+
+      // No more users to fetch
+      if (users.length === 0) {
+        break;
+      }
+
+      // Add users to map using string keys
+      for (const user of users) {
+        userMap.set(String(user.id), user);
+      }
+
+      // If we got fewer than 100, we've reached the end
+      if (users.length < 100) {
+        break;
+      }
+
+      page++;
     }
 
-    const data = await response.json();
-
-    if (data.errors) {
-      console.error('Monday GraphQL error fetching users:', data.errors);
-      return new Map();
-    }
-
-    const users = data.data?.users || [];
-
-    // Use string keys since user IDs can come as strings from the API
-    const userMap = new Map<string, MondayUser>();
-    for (const user of users) {
-      // Store by both string and numeric key to handle type differences
-      userMap.set(String(user.id), user);
-    }
-
-    console.log(`Loaded ${userMap.size} users from Monday API`);
-    // Log users with photos for debugging
-    const usersWithPhotos = users.filter((u: MondayUser) => u.photo_thumb).map((u: MondayUser) => u.name);
-    console.log(`Users with photos: ${usersWithPhotos.join(', ')}`);
+    console.log(`Loaded ${userMap.size} users from Monday API (${page} pages)`);
 
     return userMap;
   } catch (error) {
     console.error('Error fetching users:', error);
-    return new Map();
+    return userMap; // Return what we have so far
   }
 }
 
