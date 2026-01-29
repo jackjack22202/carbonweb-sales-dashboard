@@ -216,7 +216,7 @@ function processData(items: MondayItem[], monthlyGoal: number): DashboardData {
 
     const repName = ownerCol?.text || 'Unknown';
     const dealValue = parseFloat(valueCol?.text || '0') || 0;
-    const dateSignedStr = dateSignedCol?.text;
+    const dateSignedStr = dateSignedCol?.text ?? null;
     const dateSigned = parseDate(dateSignedStr);
     const leadSourceType = leadSourceCol?.text || '';
 
@@ -320,12 +320,12 @@ function processData(items: MondayItem[], monthlyGoal: number): DashboardData {
   if (goalPercentage > 100) {
     news.unshift({
       id: 0,
-      type: 'stats',
+      type: 'win' as const,
       emoji: '📊',
       headline: `Team hits ${goalPercentage}% of monthly goal!`,
       body: `$${totalCurrentMonth.toLocaleString()} closed this month.`,
       timestamp: 'Today',
-      rep: null
+      rep: { name: 'Team', initials: '🎯', color: '#8B5CF6' }
     });
   }
 
