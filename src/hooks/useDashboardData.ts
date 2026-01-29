@@ -12,10 +12,19 @@ export interface SalesRep {
   lastMonth: number;
 }
 
+export interface SEInfo {
+  name: string;
+  initials: string;
+  color: string;
+  photoUrl: string | null;
+}
+
 export interface TopDeal {
   company: string;
   value: number;
   rep: { name: string; initials: string; color: string; photoUrl: string | null };
+  se: SEInfo | null;
+  scopeId: string | null;
 }
 
 export interface TargetData {
@@ -57,6 +66,10 @@ const API_BASE_URL = import.meta.env.PROD
   ? '/api/monday'
   : (import.meta.env.VITE_API_URL || '/api/monday');
 
+const NEWS_API_URL = import.meta.env.PROD
+  ? '/api/generate-news'
+  : (import.meta.env.VITE_NEWS_API_URL || '/api/generate-news');
+
 interface UseDashboardOptions {
   refreshInterval?: number;
   minThreshold?: number;
@@ -88,6 +101,49 @@ export function useDashboardData(options: UseDashboardOptions = {}): UseDashboar
       }
 
       const result = await response.json();
+
+      // Try to fetch AI-generated news (non-blocking)
+      try {
+        // Extract deal info from the basic news for AI generation
+        const deals = result.news?.map((n: NewsItem) => ({
+          repName: n.rep?.name || 'Unknown',
+          company: n.headline.match(/closes ([^for]+) for/)?.[1] || 'Deal',
+          value: parseInt(n.headline.match(/\$([0-9,]+)/)?.[1]?.replace(/,/g, '') || '0'),
+          timestamp: n.timestamp
+        })).filter((d: { value: number }) => d.value > 0).slice(0, 6) || [];
+
+        const totalThisMonth = result.salesReps?.reduce((sum: number, r: SalesRep) => sum + r.currentMonth, 0) || 0;
+        const goalPercentage = result.cwTarget?.goal ? Math.round((totalThisMonth / result.cwTarget.goal) * 100) : 0;
+
+        if (deals.length > 0) {
+          const newsResponse = await fetch(new URL(NEWS_API_URL, window.location.origin).toString(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              deals,
+              teamStats: goalPercentage > 50 ? { totalThisMonth, goalPercentage } : undefined
+            })
+          });
+
+          if (newsResponse.ok) {
+            const newsResult = await newsResponse.json();
+            if (newsResult.news && newsResult.news.length > 0) {
+              // Merge AI news with rep info from original data
+              result.news = newsResult.news.map((n: NewsItem, i: number) => {
+                const originalNews = result.news?.[i];
+                return {
+                  ...n,
+                  rep: originalNews?.rep || n.rep
+                };
+              });
+            }
+          }
+        }
+      } catch (newsErr) {
+        console.warn('AI news generation failed, using default news:', newsErr);
+        // Continue with default news from Monday API
+      }
+
       setData(result);
       setLastUpdated(new Date());
     } catch (err) {

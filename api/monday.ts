@@ -30,6 +30,13 @@ interface RepInfo {
   photoUrl: string | null;
 }
 
+interface SEInfo {
+  name: string;
+  initials: string;
+  color: string;
+  photoUrl: string | null;
+}
+
 interface DashboardData {
   salesReps: Array<{
     repId: string;
@@ -47,11 +54,15 @@ interface DashboardData {
       company: string;
       value: number;
       rep: RepInfo;
+      se: SEInfo | null;
+      scopeId: string | null;
     } | null;
     lastWeek: {
       company: string;
       value: number;
       rep: RepInfo;
+      se: SEInfo | null;
+      scopeId: string | null;
     } | null;
   };
   cwTarget: { current: number; goal: number; label: string };
@@ -346,7 +357,91 @@ async function fetchMondayDataFallback(apiToken: string): Promise<MondayItem[]> 
   return allItems;
 }
 
-function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThreshold: number, userMap: Map<string, MondayUser>): DashboardData {
+// Fetch scope items to get SE (Solutions Engineer) info
+// The scope items should have a people column for the SE assigned
+async function fetchScopeItems(apiToken: string, scopeIds: number[], userMap: Map<string, MondayUser>): Promise<Map<number, SEInfo>> {
+  if (scopeIds.length === 0) return new Map();
+
+  const seMap = new Map<number, SEInfo>();
+
+  try {
+    // Query scope items - look for a people column (typically 'person' or similar)
+    const query = `
+      query {
+        items(ids: [${scopeIds.join(',')}]) {
+          id
+          column_values {
+            id
+            text
+            value
+            type
+          }
+        }
+      }
+    `;
+
+    const response = await fetch(MONDAY_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': apiToken,
+        'API-Version': '2024-10'
+      },
+      body: JSON.stringify({ query })
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch scope items');
+      return seMap;
+    }
+
+    const data = await response.json();
+    const items = data.data?.items || [];
+
+    for (const item of items) {
+      // Find a people column in the scope (could be 'person', 'people', 'se', etc.)
+      const peopleCol = item.column_values?.find((c: any) =>
+        c.type === 'people' || c.type === 'multiple-person' ||
+        c.id === 'person' || c.id === 'people' || c.id === 'se' || c.id === 'solutions_engineer'
+      );
+
+      if (peopleCol?.value) {
+        try {
+          const parsed = JSON.parse(peopleCol.value);
+          if (parsed.personsAndTeams && parsed.personsAndTeams.length > 0) {
+            const person = parsed.personsAndTeams[0];
+            if (person.id && person.kind === 'person') {
+              const user = userMap.get(String(person.id));
+              const seName = user?.name || peopleCol.text || 'SE';
+              seMap.set(parseInt(item.id), {
+                name: seName,
+                initials: seName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
+                color: '#6366F1', // Indigo for SE
+                photoUrl: user?.photo_thumb || null
+              });
+            }
+          }
+        } catch {
+          // Use text fallback
+          if (peopleCol.text) {
+            seMap.set(parseInt(item.id), {
+              name: peopleCol.text,
+              initials: peopleCol.text.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
+              color: '#6366F1',
+              photoUrl: null
+            });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching scope items:', error);
+  }
+
+  return seMap;
+}
+
+function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThreshold: number, userMap: Map<string, MondayUser>, scopeSEMap: Map<number, SEInfo>): DashboardData {
   const repMap = new Map<string, {
     name: string;
     photoUrl: string | null;
@@ -370,6 +465,7 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
     dateSigned: Date;
     isThisWeek: boolean;
     isLastWeek: boolean;
+    scopeIds: number[];
   }> = [];
 
   for (const item of items) {
@@ -441,14 +537,19 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
     // Only include deals that have scopes attached AND meet minimum threshold
     // For board_relation columns, check the value field for linkedPulseIds
     let hasScope = false;
+    let scopeIds: number[] = [];
     if (scopeCol?.text && scopeCol.text.trim() !== '') {
       hasScope = true;
-    } else if (scopeCol?.value) {
+    }
+    if (scopeCol?.value) {
       try {
         const parsed = JSON.parse(scopeCol.value);
-        hasScope = parsed.linkedPulseIds && parsed.linkedPulseIds.length > 0;
+        if (parsed.linkedPulseIds && parsed.linkedPulseIds.length > 0) {
+          hasScope = true;
+          scopeIds = parsed.linkedPulseIds.map((p: { linkedPulseId: number }) => p.linkedPulseId);
+        }
       } catch {
-        hasScope = false;
+        // Ignore parse errors
       }
     }
     const meetsThreshold = dealValue >= topDealsMinThreshold;
@@ -460,7 +561,8 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
         repName,
         dateSigned,
         isThisWeek: isThisWeek(dateSigned),
-        isLastWeek: isLastWeek(dateSigned)
+        isLastWeek: isLastWeek(dateSigned),
+        scopeIds
       });
     }
   }
@@ -495,16 +597,29 @@ function processData(items: MondayItem[], monthlyGoal: number, topDealsMinThresh
       : { name: repName, initials: getInitials(repName), color: '#6B7280', photoUrl: repPhotoMap.get(repName) || null };
   };
 
+  // Get SE info for top deals from the first linked scope
+  const getSEInfo = (scopeIds: number[]): SEInfo | null => {
+    for (const scopeId of scopeIds) {
+      const se = scopeSEMap.get(scopeId);
+      if (se) return se;
+    }
+    return null;
+  };
+
   const topDeals = {
     thisWeek: thisWeekDeals[0] ? {
       company: thisWeekDeals[0].company,
       value: Math.round(thisWeekDeals[0].value),
-      rep: getRepInfo(thisWeekDeals[0].repName)
+      rep: getRepInfo(thisWeekDeals[0].repName),
+      se: getSEInfo(thisWeekDeals[0].scopeIds),
+      scopeId: thisWeekDeals[0].scopeIds[0]?.toString() || null
     } : null,
     lastWeek: lastWeekDeals[0] ? {
       company: lastWeekDeals[0].company,
       value: Math.round(lastWeekDeals[0].value),
-      rep: getRepInfo(lastWeekDeals[0].repName)
+      rep: getRepInfo(lastWeekDeals[0].repName),
+      se: getSEInfo(lastWeekDeals[0].scopeIds),
+      scopeId: lastWeekDeals[0].scopeIds[0]?.toString() || null
     } : null
   };
 
@@ -593,7 +708,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fetchUsers(apiToken),
       fetchMondayData(apiToken)
     ]);
-    const data = processData(items, monthlyGoal, topDealsMinThreshold, userMap);
+
+    // Collect all scope IDs from recent deals to fetch SE info
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const allScopeIds: number[] = [];
+    for (const item of items) {
+      const scopeCol = item.column_values.find(c => c.id === 'link_to___scopes____1');
+      const dateSignedCol = item.column_values.find(c => c.id === 'date4__1');
+      const dateSigned = dateSignedCol?.text ? new Date(dateSignedCol.text) : null;
+
+      if (dateSigned && dateSigned >= twoWeeksAgo && scopeCol?.value) {
+        try {
+          const parsed = JSON.parse(scopeCol.value);
+          if (parsed.linkedPulseIds) {
+            for (const p of parsed.linkedPulseIds) {
+              if (p.linkedPulseId && !allScopeIds.includes(p.linkedPulseId)) {
+                allScopeIds.push(p.linkedPulseId);
+              }
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    }
+
+    // Fetch SE info for scopes (limit to first 10 to avoid timeout)
+    const scopeSEMap = await fetchScopeItems(apiToken, allScopeIds.slice(0, 10), userMap);
+
+    const data = processData(items, monthlyGoal, topDealsMinThreshold, userMap, scopeSEMap);
 
     // Update cache (only for default threshold)
     if (topDealsMinThreshold === 0) {

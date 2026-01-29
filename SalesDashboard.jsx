@@ -79,9 +79,19 @@ const formatCurrency = (value) => {
   }).format(value);
 };
 
+// Format currency rounded to nearest thousand (e.g., $117K)
+const formatCurrencyShort = (value) => {
+  const thousands = Math.round(value / 1000);
+  return `$${thousands}K`;
+};
+
 const getCurrentMonth = () => {
   return new Date().toLocaleDateString('en-US', { month: 'long' });
 };
+
+// Lighter grey colors used across widgets
+const LIGHT_GREY = '#E8EAED';  // Lighter background grey
+const TRACK_GREY = '#EBEDEF';  // Ring track grey
 
 // ============ AVATAR COMPONENT ============
 const Avatar = ({ initials, color, size = 40, photoUrl = null }) => {
@@ -452,7 +462,7 @@ const TargetRing = ({ current, goal, label }) => {
       </defs>
     );
 
-    // Background ring (track)
+    // Background ring (track) - lighter grey
     rings.push(
       <circle
         key="bg"
@@ -460,7 +470,7 @@ const TargetRing = ({ current, goal, label }) => {
         cy={cy}
         r={radius}
         fill="none"
-        stroke="#E5E7EB"
+        stroke={TRACK_GREY}
         strokeWidth={strokeWidth}
       />
     );
@@ -602,24 +612,35 @@ const TargetRing = ({ current, goal, label }) => {
   );
 };
 
-// ============ TOP DEALS COMPONENT ============
-const TopDeals = ({ thisWeek, lastWeek }) => {
-  const DealCard = ({ title, deal }) => (
+// ============ TOP SCOPES SOLD COMPONENT ============
+const TopScopesSold = ({ thisWeek, lastWeek }) => {
+  const ScopeCard = ({ title, deal }) => (
     <div className="flex-1 flex flex-col">
       <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">{title}</p>
       {deal ? (
-        <div className="flex-1 flex items-center justify-center gap-3">
-          <Avatar initials={deal.rep.initials} color={deal.rep.color} size={48} photoUrl={deal.rep.photoUrl} />
+        <div className="flex-1 flex items-center justify-center gap-4">
+          {/* AE Avatar x SE Avatar */}
+          <div className="flex items-center gap-1">
+            <Avatar initials={deal.rep.initials} color={deal.rep.color} size={44} photoUrl={deal.rep.photoUrl} />
+            <span className="text-gray-400 text-lg font-light mx-1">×</span>
+            <Avatar
+              initials={deal.se?.initials || 'SE'}
+              color={deal.se?.color || '#6B7280'}
+              size={44}
+              photoUrl={deal.se?.photoUrl || null}
+            />
+          </div>
+          {/* Deal Data */}
           <div className="text-center">
             <p className="font-medium text-gray-800 text-sm">{deal.company}</p>
             <p className="text-2xl font-bold" style={{ color: deal.rep.color }}>{formatCurrency(deal.value)}</p>
-            <p className="text-sm text-gray-500">{deal.rep.name}</p>
+            <p className="text-xs text-gray-500">{deal.rep.name} + {deal.se?.name || 'SE'}</p>
           </div>
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center text-gray-400">
           <span className="text-2xl mr-2">📭</span>
-          <p className="text-sm">No qualifying deals</p>
+          <p className="text-sm">No qualifying scopes</p>
         </div>
       )}
     </div>
@@ -627,13 +648,48 @@ const TopDeals = ({ thisWeek, lastWeek }) => {
 
   return (
     <Card className="p-5 h-full flex flex-col">
-      <h2 className="text-lg font-semibold text-gray-800 mb-2">Top Deals</h2>
+      <h2 className="text-lg font-semibold text-gray-800 mb-2">Top Scopes Sold</h2>
       <div className="flex-1 flex flex-col">
-        <DealCard title="THIS WEEK" deal={thisWeek} />
+        <ScopeCard title="THIS WEEK" deal={thisWeek} />
         <div className="border-t border-gray-100 my-2" />
-        <DealCard title="LAST WEEK" deal={lastWeek} />
+        <ScopeCard title="LAST WEEK" deal={lastWeek} />
       </div>
     </Card>
+  );
+};
+
+// ============ TOOLTIP COMPONENT ============
+const Tooltip = ({ children, content }) => {
+  const [show, setShow] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const tooltipRef = React.useRef(null);
+
+  const handleMouseMove = (e) => {
+    setPosition({ x: e.clientX, y: e.clientY });
+  };
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onMouseMove={handleMouseMove}
+    >
+      {children}
+      {show && (
+        <div
+          ref={tooltipRef}
+          className="fixed z-50 px-3 py-2 text-sm bg-gray-900 text-white rounded-lg shadow-lg pointer-events-none whitespace-nowrap"
+          style={{
+            left: position.x + 12,
+            top: position.y - 10,
+            transform: 'translateY(-100%)'
+          }}
+        >
+          {content}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -672,12 +728,10 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
   const aeColor = settings.accentColor;  // Teal for AE Sourced
 
   // Dynamic scaling based on number of reps
-  // Base height is 52px (44px bar + 8px gap), max is 15% larger (60px)
-  // Min height scales down as more reps are added
   const repCount = sortedData.length;
-  const headerHeight = 52; // Title + dropdown area
-  const legendHeight = 48; // Legend at bottom
-  const containerPadding = 40; // p-5 = 20px * 2
+  const headerHeight = 52;
+  const legendHeight = 48;
+  const containerPadding = 40;
   const availableForBars = (availableHeight || 400) - headerHeight - legendHeight - containerPadding;
 
   // Calculate ideal bar height - max 60px, min 32px
@@ -719,50 +773,58 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
 
               {/* Bar container - NO background grey, just transparent */}
               <div
-                className="flex-1 relative rounded-xl overflow-hidden"
+                className="flex-1 relative rounded-xl overflow-visible"
                 style={{ height: `${barHeight}px` }}
               >
-                {/* Last month bar (light grey) - no full-width background */}
-                <div
-                  className="absolute inset-y-0 left-0 rounded-xl"
-                  style={{
-                    width: `${lastMonthWidthPercent}%`,
-                    backgroundColor: '#D1D5DB',
-                  }}
-                />
+                {/* Last month bar (lighter grey) with tooltip */}
+                <Tooltip content={`Last Month: ${formatCurrency(rep.lastMonth)}`}>
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-xl cursor-pointer"
+                    style={{
+                      width: `${lastMonthWidthPercent}%`,
+                      backgroundColor: LIGHT_GREY,
+                    }}
+                  />
+                </Tooltip>
 
-                {/* Stacked current month bars */}
+                {/* Stacked current month bars with tooltips */}
                 <div
                   className="absolute inset-y-0 left-0 flex rounded-xl overflow-hidden transition-all duration-1000 ease-out"
                   style={{ width: `${totalCurrentPercent}%` }}
                 >
                   {/* CW Sourced portion (purple) */}
                   {cwWidthPercent > 0 && (
-                    <div
-                      style={{
-                        width: `${(cwWidthPercent / totalCurrentPercent) * 100}%`,
-                        backgroundColor: cwColor,
-                      }}
-                    />
+                    <Tooltip content={`CW Sourced: ${formatCurrency(rep.currentMonthCW || 0)}`}>
+                      <div
+                        className="h-full cursor-pointer"
+                        style={{
+                          width: `${(cwWidthPercent / totalCurrentPercent) * 100}%`,
+                          backgroundColor: cwColor,
+                        }}
+                      />
+                    </Tooltip>
                   )}
                   {/* AE Sourced portion (teal) */}
                   {aeWidthPercent > 0 && (
-                    <div
-                      style={{
-                        width: `${(aeWidthPercent / totalCurrentPercent) * 100}%`,
-                        backgroundColor: aeColor,
-                      }}
-                    />
+                    <Tooltip content={`AE Sourced: ${formatCurrency(rep.currentMonthAE || 0)}`}>
+                      <div
+                        className="h-full cursor-pointer"
+                        style={{
+                          width: `${(aeWidthPercent / totalCurrentPercent) * 100}%`,
+                          backgroundColor: aeColor,
+                        }}
+                      />
+                    </Tooltip>
                   )}
                 </div>
 
-                {/* Value label overlay */}
+                {/* Value label - black text OUTSIDE the bar at the end of current month bar */}
                 <div
-                  className="absolute inset-y-0 left-0 flex items-center justify-end pr-4 pointer-events-none"
-                  style={{ width: `${Math.max(totalCurrentPercent, 15)}%` }}
+                  className="absolute inset-y-0 flex items-center pointer-events-none"
+                  style={{ left: `${totalCurrentPercent}%`, paddingLeft: '8px' }}
                 >
-                  <span className="text-white text-sm font-semibold drop-shadow-sm">
-                    {formatCurrency(rep.currentMonth)}
+                  <span className="text-gray-900 text-sm font-semibold whitespace-nowrap">
+                    {formatCurrencyShort(rep.currentMonth)}
                   </span>
                 </div>
               </div>
@@ -782,7 +844,7 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
           <span className="text-xs text-gray-500">AE Sourced</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded" style={{ backgroundColor: '#D1D5DB' }} />
+          <div className="w-3 h-3 rounded" style={{ backgroundColor: LIGHT_GREY }} />
           <span className="text-xs text-gray-500">Last Month</span>
         </div>
       </div>
@@ -939,7 +1001,7 @@ function DashboardContent() {
           <TargetRing {...aeTarget} />
         </div>
         <div style={{ height: '300px' }}>
-          <TopDeals
+          <TopScopesSold
             thisWeek={dashboardData.topDeals.thisWeek}
             lastWeek={dashboardData.topDeals.lastWeek}
           />
