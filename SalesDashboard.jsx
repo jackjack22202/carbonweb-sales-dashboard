@@ -397,13 +397,13 @@ const SettingsButton = ({ onClick }) => {
   );
 };
 
-// ============ TARGET RING WIDGET - ANIMATED LAPS WITH APPLE WATCH OVERLAP ============
+// ============ TARGET RING WIDGET - SMOOTH ANIMATED RING ============
 const TargetRing = ({ current, goal, label }) => {
   const { settings } = useSettings();
   const [animatedPercentage, setAnimatedPercentage] = useState(0);
   const percentage = (current / goal) * 100;
 
-  // Unique ID for this widget's SVG filters
+  // Unique ID for this widget's SVG gradient
   const filterId = React.useMemo(() => `ring-${Math.random().toString(36).substr(2, 9)}`, []);
 
   useEffect(() => {
@@ -428,7 +428,7 @@ const TargetRing = ({ current, goal, label }) => {
     requestAnimationFrame(animate);
   }, [percentage]);
 
-  // Larger ring size
+  // Ring dimensions
   const size = 220;
   const strokeWidth = 22;
   const radius = (size - strokeWidth) / 2;
@@ -438,130 +438,15 @@ const TargetRing = ({ current, goal, label }) => {
   const displayRemainder = animatedPercentage % 100;
 
   const mainColor = settings.accentColor;
-  const darkerColor = settings.accentColor;
   const exceededGoal = animatedPercentage >= 100;
   const multiplier = Math.floor(animatedPercentage / 100);
 
   const animatedValue = (current * (animatedPercentage / percentage)) || 0;
 
-  const renderRings = () => {
-    const rings = [];
-    const cx = size / 2;
-    const cy = size / 2;
-
-    // SVG Filters for depth effects (unique IDs per widget)
-    rings.push(
-      <defs key="defs">
-        <filter id={`dropShadow-${filterId}`} x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="rgba(0,0,0,0.15)" />
-        </filter>
-        <linearGradient id={`ringGradient-${filterId}`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor={mainColor} />
-          <stop offset="100%" stopColor={darkerColor} />
-        </linearGradient>
-      </defs>
-    );
-
-    // Background ring (track) - lighter grey
-    rings.push(
-      <circle
-        key="bg"
-        cx={cx}
-        cy={cy}
-        r={radius}
-        fill="none"
-        stroke={TRACK_GREY}
-        strokeWidth={strokeWidth}
-      />
-    );
-
-    // Draw underlying completed lap layers - fixed number to prevent shake
-    const maxLapLayers = 10;
-    for (let i = 0; i < maxLapLayers; i++) {
-      const layerOpacity = i < displayLaps ? Math.min(0.4 + (i * 0.1), 0.8) : 0;
-      rings.push(
-        <circle
-          key={`lap-layer-${i}`}
-          cx={cx}
-          cy={cy}
-          r={radius}
-          fill="none"
-          stroke={mainColor}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          opacity={layerOpacity}
-          style={{
-            transform: 'rotate(-90deg)',
-            transformOrigin: 'center',
-          }}
-        />
-      );
-    }
-
-    // Current progress arc (the "top" layer that creates overlap)
-    const currentOffset = circumference - (displayRemainder / 100) * circumference;
-
-    // Main current progress arc
-    rings.push(
-      <circle
-        key="current-progress"
-        cx={cx}
-        cy={cy}
-        r={radius}
-        fill="none"
-        stroke={`url(#ringGradient-${filterId})`}
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={currentOffset}
-        style={{
-          transform: 'rotate(-90deg)',
-          transformOrigin: 'center',
-        }}
-      />
-    );
-
-    // End cap dot - follows the progress
-    const endAngle = (displayRemainder / 100) * 360;
-    const endX = cx + radius * Math.cos((endAngle - 90) * Math.PI / 180);
-    const endY = cy + radius * Math.sin((endAngle - 90) * Math.PI / 180);
-
-    // Shadow for end cap
-    rings.push(
-      <circle
-        key="end-cap-shadow"
-        cx={endX}
-        cy={endY}
-        r={strokeWidth / 2 - 1}
-        fill="rgba(0,0,0,0.15)"
-        style={{ transform: 'translate(1px, 1px)' }}
-      />
-    );
-
-    // End cap - fits within stroke
-    rings.push(
-      <circle
-        key="end-cap"
-        cx={endX}
-        cy={endY}
-        r={strokeWidth / 2 - 2}
-        fill={mainColor}
-      />
-    );
-
-    // Inner highlight on end cap
-    rings.push(
-      <circle
-        key="end-cap-highlight"
-        cx={endX - 1}
-        cy={endY - 1}
-        r={strokeWidth / 6}
-        fill="rgba(255,255,255,0.4)"
-      />
-    );
-
-    return rings;
-  };
+  // Calculate stroke offset for current progress
+  const currentOffset = circumference - (displayRemainder / 100) * circumference;
+  const cx = size / 2;
+  const cy = size / 2;
 
   return (
     <Card className="p-6 h-full flex flex-col overflow-hidden">
@@ -598,7 +483,58 @@ const TargetRing = ({ current, goal, label }) => {
         <div className="flex-1 flex justify-center items-center">
           <div className="relative" style={{ width: size, height: size }}>
             <svg width={size} height={size}>
-              {renderRings()}
+              {/* Gradient definition */}
+              <defs>
+                <linearGradient id={`ringGradient-${filterId}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor={mainColor} />
+                  <stop offset="100%" stopColor={mainColor} />
+                </linearGradient>
+              </defs>
+
+              {/* Background ring (track) */}
+              <circle
+                cx={cx}
+                cy={cy}
+                r={radius}
+                fill="none"
+                stroke={TRACK_GREY}
+                strokeWidth={strokeWidth}
+              />
+
+              {/* Completed lap layers (for >100%) */}
+              {Array.from({ length: Math.min(displayLaps, 5) }).map((_, i) => (
+                <circle
+                  key={`lap-${i}`}
+                  cx={cx}
+                  cy={cy}
+                  r={radius}
+                  fill="none"
+                  stroke={mainColor}
+                  strokeWidth={strokeWidth}
+                  opacity={0.3 + (i * 0.1)}
+                  style={{
+                    transform: 'rotate(-90deg)',
+                    transformOrigin: 'center',
+                  }}
+                />
+              ))}
+
+              {/* Current progress arc */}
+              <circle
+                cx={cx}
+                cy={cy}
+                r={radius}
+                fill="none"
+                stroke={`url(#ringGradient-${filterId})`}
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={currentOffset}
+                style={{
+                  transform: 'rotate(-90deg)',
+                  transformOrigin: 'center',
+                }}
+              />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-3xl font-bold" style={{ color: mainColor }}>
@@ -630,6 +566,8 @@ const TopScopesSold = ({ thisWeek, lastWeek }) => {
               photoUrl={deal.se?.photoUrl || null}
             />
           </div>
+          {/* Vertical black divider */}
+          <div className="w-px h-12 bg-gray-900" />
           {/* Deal Data */}
           <div className="text-center">
             <p className="font-medium text-gray-800 text-sm">{deal.company}</p>
