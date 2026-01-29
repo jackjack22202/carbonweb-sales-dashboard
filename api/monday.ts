@@ -481,8 +481,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })),
         sampleItem: items[0] ? {
           name: items[0].name,
-          columns: items[0].column_values.map(c => ({ id: c.id, text: c.text }))
+          columns: items[0].column_values.map(c => ({ id: c.id, text: c.text, value: c.value }))
         } : null,
+        // Check scope column value field (it's a board_relation)
+        scopeColumnSample: items.slice(0, 10).map(item => {
+          const scopeCol = item.column_values.find(c => c.id === 'link_to___scopes____1');
+          return {
+            name: item.name.split('\n')[0],
+            scopeText: scopeCol?.text,
+            scopeValue: scopeCol?.value
+          };
+        }),
         boardColumns: columns.filter(c =>
           c.title.toLowerCase().includes('scope') ||
           c.title.toLowerCase().includes('source') ||
