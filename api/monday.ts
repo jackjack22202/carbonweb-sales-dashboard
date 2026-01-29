@@ -4,6 +4,7 @@ const MONDAY_API_URL = 'https://api.monday.com/v2';
 const DEALS_BOARD_ID = '6385549292';
 // Note: We query ALL deals on the board, not just a specific group
 // A deal is considered "won" if it has a Date Signed (date4__1) populated
+// Build trigger: v2
 
 interface MondayItem {
   id: string;
