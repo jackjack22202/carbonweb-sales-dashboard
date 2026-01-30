@@ -95,10 +95,11 @@ const TRACK_GREY = '#EBEDEF';  // Ring track grey
 const DIVIDER_GREY = '#D1D5DB'; // Grey for pill dividers
 
 // ============ RANK BADGE COMPONENT (Mario Kart Style) ============
-const RankBadge = ({ rank }) => {
+const RankBadge = ({ rank, position = 'left' }) => {
   // Mario Kart style - bold colored numbers with black outline
+  // 1 is gold/yellow, 2 is blue, 3 is green
   const badges = {
-    1: { color: '#E53935' },  // Red for 1st
+    1: { color: '#FFD700' },  // Gold for 1st
     2: { color: '#1E88E5' },  // Blue for 2nd
     3: { color: '#43A047' },  // Green for 3rd
   };
@@ -106,9 +107,11 @@ const RankBadge = ({ rank }) => {
   const badge = badges[rank];
   if (!badge) return null;
 
+  const positionClass = position === 'left' ? '-left-3' : '-right-1';
+
   return (
     <div
-      className="absolute -top-1 -right-1 flex items-center justify-center"
+      className={`absolute -top-1 ${positionClass} flex items-center justify-center`}
       style={{
         fontSize: '22px',
         fontWeight: 900,
@@ -485,7 +488,7 @@ const TargetRing = ({ current, goal, label }) => {
 
       <div className="flex-1 flex items-center gap-6">
         {/* Left side - Stats (bigger text) */}
-        <div className="flex-shrink-0 min-w-0">
+        <div className="flex-shrink-0 min-w-0 self-center">
           <div className="mb-4">
             <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">REVENUE</p>
             <p className="text-5xl font-bold" style={{ color: mainColor }}>
@@ -510,8 +513,8 @@ const TargetRing = ({ current, goal, label }) => {
           )}
         </div>
 
-        {/* Right side - Ring (larger) */}
-        <div className="flex-1 flex justify-center items-center">
+        {/* Right side - Ring (larger, vertically centered) */}
+        <div className="flex-1 flex justify-center items-center h-full">
           <div className="relative" style={{ width: size, height: size }}>
             <svg width={size} height={size}>
               {/* Gradient definition */}
@@ -581,7 +584,7 @@ const TargetRing = ({ current, goal, label }) => {
 
 // ============ TOP SCOPES SOLD COMPONENT ============
 const TopScopesSold = ({ thisWeek, lastWeek }) => {
-  const ScopeCard = ({ title, deal }) => (
+  const ScopeCard = ({ title, deal, isThisWeek }) => (
     <div className="flex-1 flex flex-col">
       <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">{title}</p>
       {deal ? (
@@ -602,7 +605,9 @@ const TopScopesSold = ({ thisWeek, lastWeek }) => {
           {/* Deal Data */}
           <div className="text-center">
             <p className="font-semibold text-gray-800">{deal.company}</p>
-            <p className="text-2xl font-bold" style={{ color: deal.rep.color }}>{formatCurrency(deal.value)}</p>
+            <p className="text-2xl font-bold" style={{ color: isThisWeek ? '#16A34A' : '#1F2937' }}>
+              {formatCurrency(deal.value)}
+            </p>
             <p className="text-xs text-gray-500">{deal.rep.name} + {deal.se?.name || 'SE'}</p>
           </div>
         </div>
@@ -619,9 +624,9 @@ const TopScopesSold = ({ thisWeek, lastWeek }) => {
     <Card className="p-5 h-full flex flex-col">
       <h2 className="text-2xl font-bold text-gray-800 mb-3">Top Scopes Sold</h2>
       <div className="flex-1 flex flex-col">
-        <ScopeCard title="THIS WEEK" deal={thisWeek} />
+        <ScopeCard title="THIS WEEK" deal={thisWeek} isThisWeek={true} />
         <div className="border-t border-gray-100 my-2" />
-        <ScopeCard title="LAST WEEK" deal={lastWeek} />
+        <ScopeCard title="LAST WEEK" deal={lastWeek} isThisWeek={false} />
       </div>
     </Card>
   );
@@ -631,6 +636,7 @@ const TopScopesSold = ({ thisWeek, lastWeek }) => {
 const SalesLeaderboard = ({ data, loading, availableHeight }) => {
   const { settings } = useSettings();
   const [tooltip, setTooltip] = useState({ show: false, content: '', x: 0, y: 0 });
+  const [timePeriod, setTimePeriod] = useState('thisMonth'); // 'thisMonth', 'lastMonth', 'quarter'
 
   // Filter out excluded reps
   const filteredData = data ? data.filter(rep => !settings.excludedReps?.includes(rep.name)) : [];
@@ -668,8 +674,21 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
     );
   }
 
-  const sortedData = [...filteredData].sort((a, b) => b.currentMonth - a.currentMonth);
-  const maxValue = Math.max(...sortedData.map(d => Math.max(d.currentMonth, d.lastMonth)));
+  // Get the value to sort/display based on time period
+  const getDisplayValue = (rep) => {
+    switch (timePeriod) {
+      case 'lastMonth':
+        return rep.lastMonth;
+      case 'quarter':
+        // Quarter = current month + last month (approximation)
+        return rep.currentMonth + rep.lastMonth;
+      default:
+        return rep.currentMonth;
+    }
+  };
+
+  const sortedData = [...filteredData].sort((a, b) => getDisplayValue(b) - getDisplayValue(a));
+  const maxValue = Math.max(...sortedData.map(d => Math.max(getDisplayValue(d), d.lastMonth)));
   const topPerformer = sortedData[0];
 
   // Colors for stacked bars
@@ -707,29 +726,39 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
 
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold text-gray-800">Sales Leaderboard</h2>
-        <select className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
-          <option>This Month</option>
-          <option>Last Month</option>
-          <option>This Quarter</option>
+        <select
+          value={timePeriod}
+          onChange={(e) => setTimePeriod(e.target.value)}
+          className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600 cursor-pointer"
+        >
+          <option value="thisMonth">This Month</option>
+          <option value="lastMonth">Last Month</option>
+          <option value="quarter">This Quarter</option>
         </select>
       </div>
 
       <div className="flex-1 flex flex-col justify-evenly" style={{ gap: `${gap}px` }}>
         {sortedData.map((rep) => {
           const isTop = rep.repId === topPerformer.repId;
-          const lastMonthWidthPercent = (rep.lastMonth / maxValue) * 100;
+          const displayValue = getDisplayValue(rep);
+          const displayWidthPercent = (displayValue / maxValue) * 100;
 
-          // Calculate stacked bar widths
-          const cwWidthPercent = ((rep.currentMonthCW || 0) / maxValue) * 100;
-          const aeWidthPercent = ((rep.currentMonthAE || 0) / maxValue) * 100;
-          const totalCurrentPercent = cwWidthPercent + aeWidthPercent;
+          // For "This Month" view, show stacked CW/AE bars with last month comparison
+          // For other views, show single color bar
+          const showStacked = timePeriod === 'thisMonth';
+          const lastMonthWidthPercent = timePeriod === 'thisMonth' ? (rep.lastMonth / maxValue) * 100 : 0;
+
+          // Calculate stacked bar widths (only for this month view)
+          const cwWidthPercent = showStacked ? ((rep.currentMonthCW || 0) / maxValue) * 100 : 0;
+          const aeWidthPercent = showStacked ? ((rep.currentMonthAE || 0) / maxValue) * 100 : 0;
+          const totalCurrentPercent = showStacked ? cwWidthPercent + aeWidthPercent : displayWidthPercent;
 
           return (
             <div key={rep.repId} className="flex items-center gap-3">
-              {/* Avatar with rank badge for top 3 */}
-              <div className="relative flex-shrink-0">
+              {/* Avatar with rank badge on left for top 3 */}
+              <div className="relative flex-shrink-0 ml-4">
+                <RankBadge rank={sortedData.indexOf(rep) + 1} position="left" />
                 <Avatar initials={rep.initials} color={rep.color} size={avatarSize} photoUrl={rep.photoUrl} />
-                <RankBadge rank={sortedData.indexOf(rep) + 1} />
               </div>
 
               {/* Bar container */}
@@ -737,59 +766,74 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
                 className="flex-1 relative rounded-xl overflow-visible"
                 style={{ height: `${barHeight}px` }}
               >
-                {/* Last month bar (lighter grey) */}
-                <div
-                  className="absolute inset-y-0 left-0 rounded-xl cursor-pointer"
-                  style={{
-                    width: `${lastMonthWidthPercent}%`,
-                    backgroundColor: LIGHT_GREY,
-                    height: `${barHeight}px`,
-                  }}
-                  onMouseEnter={(e) => handleMouseEnter(e, `Last Month: ${formatCurrency(rep.lastMonth)}`)}
-                  onMouseMove={handleMouseMove}
-                  onMouseLeave={handleMouseLeave}
-                />
+                {/* Last month bar (lighter grey) - only show for "This Month" view */}
+                {showStacked && (
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-xl cursor-pointer"
+                    style={{
+                      width: `${lastMonthWidthPercent}%`,
+                      backgroundColor: LIGHT_GREY,
+                      height: `${barHeight}px`,
+                    }}
+                    onMouseEnter={(e) => handleMouseEnter(e, `Last Month: ${formatCurrency(rep.lastMonth)}`)}
+                    onMouseMove={handleMouseMove}
+                    onMouseLeave={handleMouseLeave}
+                  />
+                )}
 
-                {/* Stacked current month bars */}
+                {/* Stacked/Single bar */}
                 <div
                   className="absolute inset-y-0 left-0 flex rounded-xl overflow-hidden transition-all duration-1000 ease-out"
                   style={{ width: `${totalCurrentPercent}%`, height: `${barHeight}px` }}
                 >
-                  {/* CW Sourced portion (purple) */}
-                  {cwWidthPercent > 0 && (
+                  {showStacked ? (
+                    <>
+                      {/* CW Sourced portion (purple) */}
+                      {cwWidthPercent > 0 && (
+                        <div
+                          className="h-full cursor-pointer"
+                          style={{
+                            width: `${(cwWidthPercent / totalCurrentPercent) * 100}%`,
+                            backgroundColor: cwColor,
+                          }}
+                          onMouseEnter={(e) => handleMouseEnter(e, `CW Sourced: ${formatCurrency(rep.currentMonthCW || 0)}`)}
+                          onMouseMove={handleMouseMove}
+                          onMouseLeave={handleMouseLeave}
+                        />
+                      )}
+                      {/* AE Sourced portion (teal) */}
+                      {aeWidthPercent > 0 && (
+                        <div
+                          className="h-full cursor-pointer"
+                          style={{
+                            width: `${(aeWidthPercent / totalCurrentPercent) * 100}%`,
+                            backgroundColor: aeColor,
+                          }}
+                          onMouseEnter={(e) => handleMouseEnter(e, `AE Sourced: ${formatCurrency(rep.currentMonthAE || 0)}`)}
+                          onMouseMove={handleMouseMove}
+                          onMouseLeave={handleMouseLeave}
+                        />
+                      )}
+                    </>
+                  ) : (
+                    /* Single bar for Last Month / Quarter view */
                     <div
-                      className="h-full cursor-pointer"
-                      style={{
-                        width: `${(cwWidthPercent / totalCurrentPercent) * 100}%`,
-                        backgroundColor: cwColor,
-                      }}
-                      onMouseEnter={(e) => handleMouseEnter(e, `CW Sourced: ${formatCurrency(rep.currentMonthCW || 0)}`)}
-                      onMouseMove={handleMouseMove}
-                      onMouseLeave={handleMouseLeave}
-                    />
-                  )}
-                  {/* AE Sourced portion (teal) */}
-                  {aeWidthPercent > 0 && (
-                    <div
-                      className="h-full cursor-pointer"
-                      style={{
-                        width: `${(aeWidthPercent / totalCurrentPercent) * 100}%`,
-                        backgroundColor: aeColor,
-                      }}
-                      onMouseEnter={(e) => handleMouseEnter(e, `AE Sourced: ${formatCurrency(rep.currentMonthAE || 0)}`)}
+                      className="h-full w-full cursor-pointer"
+                      style={{ backgroundColor: cwColor }}
+                      onMouseEnter={(e) => handleMouseEnter(e, `${timePeriod === 'lastMonth' ? 'Last Month' : 'This Quarter'}: ${formatCurrency(displayValue)}`)}
                       onMouseMove={handleMouseMove}
                       onMouseLeave={handleMouseLeave}
                     />
                   )}
                 </div>
 
-                {/* Value label - black text OUTSIDE the bar at the end of current month bar */}
+                {/* Value label - black text OUTSIDE the bar */}
                 <div
                   className="absolute inset-y-0 flex items-center pointer-events-none"
                   style={{ left: `${totalCurrentPercent}%`, paddingLeft: '8px' }}
                 >
                   <span className="text-gray-900 text-sm font-semibold whitespace-nowrap">
-                    {formatCurrencyShort(rep.currentMonth)}
+                    {formatCurrencyShort(displayValue)}
                   </span>
                 </div>
               </div>

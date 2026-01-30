@@ -40,7 +40,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
 
   if (!anthropicKey) {
-    return res.status(500).json({ error: 'Anthropic API key not configured' });
+    console.error('ANTHROPIC_API_KEY not configured - returning empty news');
+    // Return empty news instead of error so UI doesn't break
+    return res.status(200).json({ news: [] });
   }
 
   try {
