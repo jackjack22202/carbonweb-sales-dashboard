@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { Redis } from '@upstash/redis';
+import { Storage } from '@mondaycom/apps-sdk';
 
 const SETTINGS_KEY = 'dashboard_settings';
 
@@ -23,59 +23,74 @@ const defaultSettings: DashboardSettings = {
   excludedReps: []
 };
 
-// Initialize Redis client (uses UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN env vars)
-function getRedisClient(): Redis | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-
-  if (!url || !token) {
-    console.warn('Redis not configured - settings will use defaults');
-    return null;
-  }
-
-  return new Redis({ url, token });
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  const redis = getRedisClient();
+  // Get token from Authorization header (short-lived token from Monday iframe)
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.replace('Bearer ', '');
+
+  if (!token) {
+    // No token - return defaults (client will use localStorage)
+    if (req.method === 'GET') {
+      return res.status(200).json({ ...defaultSettings, _source: 'defaults' });
+    }
+    return res.status(401).json({ error: 'No authorization token provided' });
+  }
 
   try {
+    // Initialize Monday Storage with the short-lived token
+    const storage = new Storage(token);
+
     if (req.method === 'GET') {
-      if (!redis) {
-        return res.status(200).json(defaultSettings);
+      // Get settings from Monday Storage
+      const result = await storage.get(SETTINGS_KEY, { shared: true });
+
+      if (result.success && result.value) {
+        const settings = typeof result.value === 'string'
+          ? JSON.parse(result.value)
+          : result.value;
+        return res.status(200).json({ ...defaultSettings, ...settings, _source: 'monday' });
       }
 
-      const settings = await redis.get<DashboardSettings>(SETTINGS_KEY);
-      return res.status(200).json(settings || defaultSettings);
+      // No settings stored yet - return defaults
+      return res.status(200).json({ ...defaultSettings, _source: 'defaults' });
     }
 
     if (req.method === 'POST') {
+      // Save settings to Monday Storage
       const newSettings = req.body as Partial<DashboardSettings>;
       const mergedSettings = { ...defaultSettings, ...newSettings };
 
-      if (redis) {
-        await redis.set(SETTINGS_KEY, mergedSettings);
-      }
+      // Remove internal fields before storing
+      const { _source, ...settingsToStore } = mergedSettings as any;
 
-      return res.status(200).json({ success: true, settings: mergedSettings });
+      const result = await storage.set(SETTINGS_KEY, JSON.stringify(settingsToStore), {
+        shared: true  // Accessible from both frontend and backend
+      });
+
+      if (result.success) {
+        return res.status(200).json({ success: true, settings: settingsToStore });
+      } else {
+        console.error('Monday Storage set failed:', result.error);
+        return res.status(500).json({ error: 'Failed to save to Monday Storage', details: result.error });
+      }
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     console.error('Settings API error:', error);
 
-    // Graceful degradation - return defaults on error
+    // Graceful degradation - return defaults on error for GET
     if (req.method === 'GET') {
-      return res.status(200).json(defaultSettings);
+      return res.status(200).json({ ...defaultSettings, _source: 'error-fallback' });
     }
 
     return res.status(500).json({
