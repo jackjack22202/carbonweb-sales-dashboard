@@ -484,19 +484,19 @@ const TargetRing = ({ current, goal, label }) => {
 
   return (
     <Card className="p-6 h-full flex flex-col overflow-hidden">
-      <h2 className="text-2xl font-bold text-gray-800 mb-2">{label}</h2>
+      <h2 className="text-2xl font-bold text-gray-800 flex-shrink-0">{label}</h2>
 
-      <div className="flex-1 flex items-center gap-6">
+      <div className="flex-1 flex items-center justify-center gap-6">
         {/* Left side - Stats (bigger text) */}
-        <div className="flex-shrink-0 min-w-0 self-center">
-          <div className="mb-4">
+        <div className="flex-shrink-0 min-w-0">
+          <div className="mb-3">
             <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">REVENUE</p>
             <p className="text-5xl font-bold" style={{ color: mainColor }}>
               {formatCurrency(animatedValue)}
             </p>
           </div>
 
-          <div className="mb-4">
+          <div className="mb-3">
             <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">GOAL</p>
             <p className="text-3xl font-bold text-gray-700">
               {formatCurrency(goal)}
@@ -514,7 +514,7 @@ const TargetRing = ({ current, goal, label }) => {
         </div>
 
         {/* Right side - Ring (larger, vertically centered) */}
-        <div className="flex-1 flex justify-center items-center h-full">
+        <div className="flex justify-center items-center flex-shrink-0">
           <div className="relative" style={{ width: size, height: size }}>
             <svg width={size} height={size}>
               {/* Gradient definition */}
