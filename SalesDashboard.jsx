@@ -504,8 +504,54 @@ const SettingsPanel = ({ isOpen, onClose, availableReps = [] }) => {
   );
 };
 
-// ============ HIDDEN SETTINGS BUTTON ============
-const SettingsButton = ({ onClick }) => {
+// ============ FULLSCREEN HOOK ============
+const useFullscreen = () => {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        // Enter fullscreen
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          await elem.requestFullscreen();
+        } else if (elem.webkitRequestFullscreen) {
+          // Safari
+          await elem.webkitRequestFullscreen();
+        }
+      } else {
+        // Exit fullscreen
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          // Safari
+          await document.webkitExitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.error('Fullscreen error:', err);
+    }
+  };
+
+  return { isFullscreen, toggleFullscreen };
+};
+
+// ============ HIDDEN CONTROL BUTTONS (Settings + Fullscreen) ============
+const ControlButtons = ({ onSettingsClick, isFullscreen, onFullscreenToggle }) => {
   const [isVisible, setIsVisible] = useState(false);
 
   return (
@@ -513,25 +559,46 @@ const SettingsButton = ({ onClick }) => {
       className="fixed bottom-4 right-4 z-40"
       onMouseEnter={() => setIsVisible(true)}
       onMouseLeave={() => setIsVisible(false)}
-      style={{ width: '80px', height: '80px' }}
+      style={{ width: '120px', height: '80px' }}
     >
       {/* Invisible hover area that's always active */}
       <div className="absolute inset-0" />
-      {/* Button positioned in center-right of hover area */}
-      <button
-        onClick={onClick}
-        className={`absolute bottom-2 right-2 p-3 rounded-full bg-white shadow-lg transition-all duration-300 ${
-          isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
-        } hover:bg-gray-50`}
-        style={{
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-        }}
-      >
-        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      </button>
+      {/* Buttons positioned in center-right of hover area */}
+      <div className={`absolute bottom-2 right-2 flex gap-2 transition-all duration-300 ${
+        isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
+      }`}>
+        {/* Fullscreen button */}
+        <button
+          onClick={onFullscreenToggle}
+          className="p-3 rounded-full bg-white shadow-lg hover:bg-gray-50 transition-colors"
+          style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+          title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+        >
+          {isFullscreen ? (
+            // Exit fullscreen icon (compress)
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+            </svg>
+          ) : (
+            // Enter fullscreen icon (expand)
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+            </svg>
+          )}
+        </button>
+        {/* Settings button */}
+        <button
+          onClick={onSettingsClick}
+          className="p-3 rounded-full bg-white shadow-lg hover:bg-gray-50 transition-colors"
+          style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+          title="Settings"
+        >
+          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 };
@@ -1061,6 +1128,7 @@ function DashboardContent() {
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [leaderboardHeight, setLeaderboardHeight] = useState(400);
+  const { isFullscreen, toggleFullscreen } = useFullscreen();
 
   // Measure available height for leaderboard
   useEffect(() => {
@@ -1146,8 +1214,12 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* Settings Button & Panel */}
-      <SettingsButton onClick={() => setSettingsOpen(true)} />
+      {/* Control Buttons (Fullscreen + Settings) & Panel */}
+      <ControlButtons
+        onSettingsClick={() => setSettingsOpen(true)}
+        isFullscreen={isFullscreen}
+        onFullscreenToggle={toggleFullscreen}
+      />
       <SettingsPanel
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
