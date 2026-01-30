@@ -23,28 +23,27 @@ interface NewsArticle {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-
-  if (!anthropicKey) {
-    console.error('ANTHROPIC_API_KEY not configured - returning empty news');
-    // Return empty news instead of error so UI doesn't break
-    return res.status(200).json({ news: [] });
-  }
-
   try {
+    // CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+
+    if (!anthropicKey) {
+      console.error('ANTHROPIC_API_KEY not configured - returning empty news');
+      // Return empty news instead of error so UI doesn't break
+      return res.status(200).json({ news: [] });
+    }
     const { deals, teamStats } = req.body as {
       deals: DealInfo[];
       teamStats?: { totalThisMonth: number; goalPercentage: number };
@@ -158,9 +157,10 @@ Generate one article per deal, plus one for team stats if provided.`;
     return res.status(200).json({ news });
   } catch (error) {
     console.error('Error generating news:', error);
-    return res.status(500).json({
-      error: 'Failed to generate news',
-      details: error instanceof Error ? error.message : 'Unknown error'
+    // Return empty news on any error so UI doesn't break
+    return res.status(200).json({
+      news: [],
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }
