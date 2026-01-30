@@ -435,9 +435,10 @@ const SettingsPanel = ({ isOpen, onClose, availableReps = [] }) => {
           {/* Colors */}
           <div>
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Colors</h3>
+            <p className="text-xs text-gray-400 mb-3">These colors are used in the leaderboard bars and target ring widgets</p>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Primary</label>
+                <label className="block text-sm text-gray-600 mb-1">CW Sourced</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -449,7 +450,7 @@ const SettingsPanel = ({ isOpen, onClose, availableReps = [] }) => {
                 </div>
               </div>
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Accent</label>
+                <label className="block text-sm text-gray-600 mb-1">AE Sourced</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -604,7 +605,7 @@ const ControlButtons = ({ onSettingsClick, isFullscreen, onFullscreenToggle }) =
 };
 
 // ============ TARGET RING WIDGET - SMOOTH ANIMATED RING ============
-const TargetRing = ({ current, goal, label }) => {
+const TargetRing = ({ current, goal, label, color }) => {
   const { settings } = useSettings();
   const [animatedPercentage, setAnimatedPercentage] = useState(0);
   const percentage = (current / goal) * 100;
@@ -643,7 +644,8 @@ const TargetRing = ({ current, goal, label }) => {
   const displayLaps = Math.floor(animatedPercentage / 100);
   const displayRemainder = animatedPercentage % 100;
 
-  const mainColor = settings.accentColor;
+  // Use passed color prop, or fall back to accentColor
+  const mainColor = color || settings.accentColor;
   const exceededGoal = animatedPercentage >= 100;
   const multiplier = Math.floor(animatedPercentage / 100);
 
@@ -1183,10 +1185,10 @@ function DashboardContent() {
       >
         {/* Row 1: Two matching target rings + Top Deals - fixed height */}
         <div style={{ height: '300px' }}>
-          <TargetRing {...cwTarget} />
+          <TargetRing {...cwTarget} color={settings.primaryColor} />
         </div>
         <div style={{ height: '300px' }}>
-          <TargetRing {...aeTarget} />
+          <TargetRing {...aeTarget} color={settings.accentColor} />
         </div>
         <div style={{ height: '300px' }}>
           <TopScopesSold
