@@ -68,37 +68,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? `\nTeam Achievement: The team has closed $${teamStats.totalThisMonth.toLocaleString()} this month (${teamStats.goalPercentage}% of goal).`
       : '';
 
-    const prompt = `You're the witty office comedian writing the sales team's internal news feed. Make it ACTUALLY funny - the kind of stuff that makes people chuckle at their desk. Think "The Office" meets sports commentary.
+    const prompt = `You're writing a sales team's news feed. Your job: make coworkers genuinely laugh out loud. Not polite chuckles - real laughs.
 
-VIBE CHECK - Be:
-- Genuinely funny, not corporate-cringe funny
-- Relatable to anyone who's worked in sales/office life
-- Playfully roasting (with love) - tease the rep like a friend would
-- Self-aware and a little sarcastic when appropriate
-- Office-appropriate but not boring
+COMEDIC TECHNIQUES TO USE (pick different ones for each article):
+1. ABSURD SPECIFICITY - "closed the deal at exactly 4:47pm, missing happy hour by 13 minutes"
+2. FAKE DRAMA - "BREAKING: Local sales rep discovers 'follow up' button, scientists baffled"
+3. UNDERSTATEMENT - "casually closes 6-figure deal, returns to arguing about lunch orders"
+4. MOCK FORMALITY - "The committee has voted: this deal officially slaps"
+5. POP CULTURE PARODY - movie/TV/meme references ("I am once again asking for your signed contract")
+6. RELATABLE CHAOS - "closed deal while on mute asking 'can you hear me now?'"
+7. PETTY OBSERVATIONS - "finally beats their Q4 2023 number, only took 14 months"
+8. SPORTS BROADCASTER - "AND THAT'S GONNA DO IT! What a play! The crowd of 3 Slack reacts goes WILD"
+9. CONSPIRACY THEORIES - "sources say they may have actually read the prospect's LinkedIn"
+10. HUMBLE BRAG CALLOUT - "tries to act casual about it, fails immediately"
 
-STYLE IDEAS:
-- Mock dramatic sports commentary ("AND THE CROWD GOES MILD!")
-- Fake breaking news alerts for mundane wins
-- Overly specific observations ("closing deals while their coffee gets cold")
-- Gentle roasts ("finally remembered how to use the CRM")
-- Relatable office humor ("powered by sheer spite and caffeine")
-- Pop culture references that actually land
-- Fake movie titles for deals ("Fast & Furious: Contract Drift")
+BANNED FOREVER (instant cringe):
+- "crushing it" / "killing it" / "slaying"
+- "coffee" references (overdone)
+- "Monday motivation" energy
+- Generic celebration ("way to go!" "nice work!")
+- Anything a LinkedIn influencer would post
 
-RULES:
-- Headlines: Under 50 chars, punchy and quotable
-- Body: Under 80 chars, the funny punchline or detail
-- First names only
-- Varied emojis that match the energy
-- NO generic phrases like "crushing it" or "killing the game"
-- Make each one feel different - vary the humor style
+REQUIREMENTS:
+- Headlines: Under 50 chars, would work as a tweet
+- Body: Under 80 chars, the punchline that lands
+- First names only (not full names)
+- EVERY article must use a DIFFERENT comedic technique from the list above
+- Emojis should be unexpected/funny, not just 🎉🔥
 
 Recent Deals:
 ${dealsText}
 ${teamStatsText}
 
-JSON format:
+Return ONLY valid JSON array:
 [
   {
     "dealIndex": 0,
@@ -108,7 +110,7 @@ JSON format:
   }
 ]
 
-Generate one article per deal (plus team stats if provided). Make them actually laugh.`;
+Generate one article per deal. Make each one a different style of funny.`;
 
     const message = await client.messages.create({
       model: 'claude-3-haiku-20240307',

@@ -271,7 +271,7 @@ const Avatar = ({ initials, color, size = 40, photoUrl = null }) => {
 // ============ CARD WRAPPER ============
 const Card = ({ children, className = '' }) => (
   <div
-    className={`bg-white rounded-2xl ${className}`}
+    className={`bg-white rounded-2xl overflow-hidden ${className}`}
     style={{
       boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
       border: '1px solid #F3F4F6'
@@ -656,7 +656,7 @@ const ControlButtons = ({ onSettingsClick, isFullscreen, onFullscreenToggle }) =
 };
 
 // ============ TARGET RING WIDGET - SMOOTH ANIMATED RING ============
-const TargetRing = ({ current, goal, label, color }) => {
+const TargetRing = ({ current, goal, label, color, compact = false }) => {
   const { settings } = useSettings();
   const [animatedPercentage, setAnimatedPercentage] = useState(0);
   const percentage = (current / goal) * 100;
@@ -686,9 +686,9 @@ const TargetRing = ({ current, goal, label, color }) => {
     requestAnimationFrame(animate);
   }, [percentage]);
 
-  // Larger ring dimensions
-  const size = 240;
-  const strokeWidth = 24;
+  // Responsive ring dimensions
+  const size = compact ? 160 : 240;
+  const strokeWidth = compact ? 16 : 24;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
@@ -707,25 +707,36 @@ const TargetRing = ({ current, goal, label, color }) => {
   const cx = size / 2;
   const cy = size / 2;
 
+  // Text sizes based on compact mode
+  const revenueFontSize = compact ? 'text-3xl' : 'text-5xl';
+  const goalFontSize = compact ? 'text-xl' : 'text-3xl';
+  const percentFontSize = compact ? 'text-3xl' : 'text-5xl';
+  const titleFontSize = compact ? 'text-xl' : 'text-2xl';
+  const labelFontSize = compact ? 'text-xs' : 'text-sm';
+  const padding = compact ? 'p-4' : 'p-6';
+  const gap = compact ? 'gap-3' : 'gap-6';
+  const topOffset = compact ? '40px' : '50px';
+  const bottomOffset = compact ? '35px' : '50px';
+
   return (
-    <Card className="p-6 h-full flex flex-col overflow-hidden relative">
-      <h2 className="text-2xl font-bold text-gray-800">{label}</h2>
+    <Card className={`${padding} h-full flex flex-col overflow-hidden relative`}>
+      <h2 className={`${titleFontSize} font-bold text-gray-800`}>{label}</h2>
 
       {/* Main content - absolutely positioned to center vertically */}
-      <div className="absolute inset-x-0 flex items-center px-6" style={{ top: '50px', bottom: '50px' }}>
-        <div className="flex items-center gap-6 w-full justify-between">
-          {/* Left side - Stats (bigger text) */}
-          <div className="flex-shrink-0">
-            <div className="mb-2">
-              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">REVENUE</p>
-              <p className="text-5xl font-bold" style={{ color: mainColor }}>
+      <div className={`absolute inset-x-0 flex items-center ${padding}`} style={{ top: topOffset, bottom: bottomOffset }}>
+        <div className={`flex items-center ${gap} w-full justify-between`}>
+          {/* Left side - Stats */}
+          <div className="flex-shrink-0 min-w-0">
+            <div className={compact ? 'mb-1' : 'mb-2'}>
+              <p className={`${labelFontSize} font-semibold text-gray-400 uppercase tracking-wide mb-1`}>REVENUE</p>
+              <p className={`${revenueFontSize} font-bold`} style={{ color: mainColor }}>
                 {formatCurrency(animatedValue)}
               </p>
             </div>
 
             <div>
-              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">GOAL</p>
-              <p className="text-3xl font-bold text-gray-700">
+              <p className={`${labelFontSize} font-semibold text-gray-400 uppercase tracking-wide mb-1`}>GOAL</p>
+              <p className={`${goalFontSize} font-bold text-gray-700`}>
                 {formatCurrency(goal)}
               </p>
             </div>
@@ -789,7 +800,7 @@ const TargetRing = ({ current, goal, label, color }) => {
               />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-5xl font-bold" style={{ color: mainColor }}>
+              <span className={`${percentFontSize} font-bold`} style={{ color: mainColor }}>
                 {Math.round(animatedPercentage)}%
               </span>
             </div>
@@ -800,9 +811,9 @@ const TargetRing = ({ current, goal, label, color }) => {
 
       {/* Badge - absolutely positioned at bottom left, doesn't affect layout */}
       {exceededGoal && (
-        <div className="absolute bottom-5 left-6">
+        <div className={`absolute ${compact ? 'bottom-3 left-4' : 'bottom-5 left-6'}`}>
           <span
-            className="inline-block px-4 py-1.5 rounded-full text-sm font-bold"
+            className={`inline-block ${compact ? 'px-3 py-1 text-xs' : 'px-4 py-1.5 text-sm'} rounded-full font-bold`}
             style={{ backgroundColor: '#D1FAE5', color: '#059669' }}
           >
             {multiplier}x GOAL
@@ -814,29 +825,36 @@ const TargetRing = ({ current, goal, label, color }) => {
 };
 
 // ============ TOP SCOPES SOLD COMPONENT ============
-const TopScopesSold = ({ thisWeek, lastWeek }) => {
+const TopScopesSold = ({ thisWeek, lastWeek, compact = false }) => {
+  const avatarSize = compact ? 36 : 48;
+  const valueFontSize = compact ? 'text-lg' : 'text-2xl';
+  const titleFontSize = compact ? 'text-xl' : 'text-2xl';
+  const labelFontSize = compact ? 'text-xs' : 'text-sm';
+  const padding = compact ? 'p-4' : 'p-5';
+  const gap = compact ? 'gap-3' : 'gap-5';
+
   const ScopeCard = ({ title, deal, isThisWeek }) => (
-    <div className="flex-1 flex flex-col">
-      <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">{title}</p>
+    <div className="flex-1 flex flex-col min-h-0">
+      <p className={`${labelFontSize} font-semibold text-gray-400 uppercase tracking-wide mb-1`}>{title}</p>
       {deal ? (
-        <div className="flex-1 flex items-center justify-center gap-5">
+        <div className={`flex-1 flex items-center justify-center ${gap}`}>
           {/* AE Avatar x SE Avatar */}
           <div className="flex items-center gap-1">
-            <Avatar initials={deal.rep.initials} color={deal.rep.color} size={48} photoUrl={deal.rep.photoUrl} />
-            <span className="text-gray-400 text-lg font-light mx-1">×</span>
+            <Avatar initials={deal.rep.initials} color={deal.rep.color} size={avatarSize} photoUrl={deal.rep.photoUrl} />
+            <span className="text-gray-400 text-sm font-light mx-0.5">×</span>
             <Avatar
               initials={deal.se?.initials || 'SE'}
               color={deal.se?.color || '#6B7280'}
-              size={48}
+              size={avatarSize}
               photoUrl={deal.se?.photoUrl || null}
             />
           </div>
           {/* Grey pill divider */}
-          <div className="w-1 h-14 rounded-full" style={{ backgroundColor: DIVIDER_GREY }} />
+          <div className={`w-1 ${compact ? 'h-10' : 'h-14'} rounded-full`} style={{ backgroundColor: DIVIDER_GREY }} />
           {/* Deal Data */}
           <div className="text-center">
-            <p className="font-semibold text-gray-800">{deal.company}</p>
-            <p className="text-2xl font-bold" style={{ color: isThisWeek ? '#16A34A' : '#1F2937' }}>
+            <p className={`font-semibold text-gray-800 ${compact ? 'text-sm' : ''}`}>{deal.company}</p>
+            <p className={`${valueFontSize} font-bold`} style={{ color: isThisWeek ? '#16A34A' : '#1F2937' }}>
               {formatCurrency(deal.value)}
             </p>
             <p className="text-xs text-gray-500">{deal.rep.name} + {deal.se?.name || 'SE'}</p>
@@ -844,7 +862,7 @@ const TopScopesSold = ({ thisWeek, lastWeek }) => {
         </div>
       ) : (
         <div className="flex-1 flex items-center justify-center text-gray-400">
-          <span className="text-2xl mr-2">📭</span>
+          <span className={`${compact ? 'text-xl' : 'text-2xl'} mr-2`}>📭</span>
           <p className="text-sm">No qualifying scopes</p>
         </div>
       )}
@@ -852,11 +870,11 @@ const TopScopesSold = ({ thisWeek, lastWeek }) => {
   );
 
   return (
-    <Card className="p-5 h-full flex flex-col">
-      <h2 className="text-2xl font-bold text-gray-800 mb-3">Top Scopes Sold</h2>
-      <div className="flex-1 flex flex-col">
+    <Card className={`${padding} h-full flex flex-col`}>
+      <h2 className={`${titleFontSize} font-bold text-gray-800 ${compact ? 'mb-2' : 'mb-3'}`}>Top Scopes Sold</h2>
+      <div className="flex-1 flex flex-col min-h-0">
         <ScopeCard title="THIS WEEK" deal={thisWeek} isThisWeek={true} />
-        <div className="border-t border-gray-100 my-2" />
+        <div className="border-t border-gray-100 my-1" />
         <ScopeCard title="LAST WEEK" deal={lastWeek} isThisWeek={false} />
       </div>
     </Card>
@@ -984,6 +1002,10 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
           const aeWidthPercent = showStacked ? ((rep.currentMonthAE || 0) / maxValue) * 100 : 0;
           const totalCurrentPercent = showStacked ? cwWidthPercent + aeWidthPercent : displayWidthPercent;
 
+          // Cap the bar width to leave room for the value label (max 85% to ensure label fits)
+          const cappedTotalPercent = Math.min(totalCurrentPercent, 85);
+          const cappedLastMonthPercent = Math.min(lastMonthWidthPercent, 85);
+
           return (
             <div key={rep.repId} className="flex items-center gap-3">
               {/* Avatar with rank badge on left for top 3 */}
@@ -992,17 +1014,17 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
                 <Avatar initials={rep.initials} color={rep.color} size={avatarSize} photoUrl={rep.photoUrl} />
               </div>
 
-              {/* Bar container */}
+              {/* Bar container - overflow hidden to prevent labels going outside */}
               <div
-                className="flex-1 relative rounded-xl overflow-visible"
+                className="flex-1 relative rounded-xl overflow-hidden"
                 style={{ height: `${barHeight}px` }}
               >
                 {/* Last month bar (lighter grey) - only show for "This Month" view */}
                 {showStacked && (
                   <div
-                    className="absolute inset-y-0 left-0 rounded-xl cursor-pointer"
+                    className="absolute inset-y-0 left-0 rounded-l-xl cursor-pointer"
                     style={{
-                      width: `${lastMonthWidthPercent}%`,
+                      width: `${cappedLastMonthPercent}%`,
                       backgroundColor: LIGHT_GREY,
                       height: `${barHeight}px`,
                     }}
@@ -1014,8 +1036,8 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
 
                 {/* Stacked/Single bar */}
                 <div
-                  className="absolute inset-y-0 left-0 flex rounded-xl overflow-hidden transition-all duration-1000 ease-out"
-                  style={{ width: `${totalCurrentPercent}%`, height: `${barHeight}px` }}
+                  className="absolute inset-y-0 left-0 flex rounded-l-xl overflow-hidden transition-all duration-1000 ease-out"
+                  style={{ width: `${cappedTotalPercent}%`, height: `${barHeight}px` }}
                 >
                   {showStacked ? (
                     <>
@@ -1058,10 +1080,10 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
                   )}
                 </div>
 
-                {/* Value label - black text OUTSIDE the bar */}
+                {/* Value label - positioned after the bar */}
                 <div
                   className="absolute inset-y-0 flex items-center pointer-events-none"
-                  style={{ left: `${totalCurrentPercent}%`, paddingLeft: '8px' }}
+                  style={{ left: `${cappedTotalPercent}%`, paddingLeft: '8px' }}
                 >
                   <span className="text-gray-900 text-sm font-semibold whitespace-nowrap">
                     {formatCurrencyShort(displayValue)}
@@ -1180,20 +1202,23 @@ function DashboardContent() {
     minThreshold: settings.topDealsMinThreshold
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [leaderboardHeight, setLeaderboardHeight] = useState(400);
+  const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
   const { isFullscreen, toggleFullscreen } = useFullscreen();
 
-  // Measure available height for leaderboard
+  // Measure viewport dimensions for responsive scaling
   useEffect(() => {
-    const updateHeight = () => {
-      // Calculate: viewport height - top row (300px) - padding (40px) - gap (16px) - bottom margin for last updated (24px)
-      const available = window.innerHeight - 300 - 40 - 16 - 24;
-      setLeaderboardHeight(Math.max(300, available));
+    const updateDimensions = () => {
+      setDimensions({ width: window.innerWidth, height: window.innerHeight });
     };
-    updateHeight();
-    window.addEventListener('resize', updateHeight);
-    return () => window.removeEventListener('resize', updateHeight);
+    updateDimensions();
+    window.addEventListener('resize', updateDimensions);
+    return () => window.removeEventListener('resize', updateDimensions);
   }, []);
+
+  // Calculate responsive sizes based on viewport
+  const isCompact = dimensions.height < 700 || dimensions.width < 1200;
+  const topRowHeight = isCompact ? Math.max(200, Math.min(280, dimensions.height * 0.35)) : 300;
+  const leaderboardHeight = Math.max(250, dimensions.height - topRowHeight - 80);
 
   // Use real data if available, otherwise fall back to mock
   const dashboardData = data || MOCK_DATA;
@@ -1226,25 +1251,26 @@ function DashboardContent() {
         </div>
       )}
 
-      {/* Grid Layout: wider top widgets, fixed height top row */}
+      {/* Grid Layout: responsive based on viewport */}
       <div
         className="h-full grid gap-4"
         style={{
-          gridTemplateColumns: '1.2fr 1.2fr 1fr',
-          gridTemplateRows: '300px 1fr'
+          gridTemplateColumns: isCompact ? '1fr 1fr 1fr' : '1.2fr 1.2fr 1fr',
+          gridTemplateRows: `${topRowHeight}px 1fr`
         }}
       >
-        {/* Row 1: Two matching target rings + Top Deals - fixed height */}
-        <div style={{ height: '300px' }}>
-          <TargetRing {...cwTarget} color={settings.primaryColor} />
+        {/* Row 1: Two matching target rings + Top Deals - responsive height */}
+        <div style={{ height: `${topRowHeight}px` }}>
+          <TargetRing {...cwTarget} color={settings.primaryColor} compact={isCompact} />
         </div>
-        <div style={{ height: '300px' }}>
-          <TargetRing {...aeTarget} color={settings.accentColor} />
+        <div style={{ height: `${topRowHeight}px` }}>
+          <TargetRing {...aeTarget} color={settings.accentColor} compact={isCompact} />
         </div>
-        <div style={{ height: '300px' }}>
+        <div style={{ height: `${topRowHeight}px` }}>
           <TopScopesSold
             thisWeek={dashboardData.topDeals.thisWeek}
             lastWeek={dashboardData.topDeals.lastWeek}
+            compact={isCompact}
           />
         </div>
 
