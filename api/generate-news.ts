@@ -68,32 +68,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? `\nTeam Achievement: The team has closed $${teamStats.totalThisMonth.toLocaleString()} this month (${teamStats.goalPercentage}% of goal).`
       : '';
 
-    const prompt = `You are a fun, energetic sports-style announcer for a sales team dashboard. Generate creative, funny, and engaging news headlines and short bodies for these recent sales wins. Make them feel like exciting sports commentary or fun office announcements.
+    const prompt = `You're the witty office comedian writing the sales team's internal news feed. Make it ACTUALLY funny - the kind of stuff that makes people chuckle at their desk. Think "The Office" meets sports commentary.
 
-Rules:
-- Keep headlines under 60 characters
-- Keep body text under 100 characters
-- Use varied emojis that match the energy (fire for big deals, party for wins, etc.)
-- Include playful references to sports, movies, or pop culture when appropriate
-- Vary the tone - some can be dramatic, some funny, some celebratory
-- First names only for reps
-- Include puns or wordplay when it fits naturally
+VIBE CHECK - Be:
+- Genuinely funny, not corporate-cringe funny
+- Relatable to anyone who's worked in sales/office life
+- Playfully roasting (with love) - tease the rep like a friend would
+- Self-aware and a little sarcastic when appropriate
+- Office-appropriate but not boring
+
+STYLE IDEAS:
+- Mock dramatic sports commentary ("AND THE CROWD GOES MILD!")
+- Fake breaking news alerts for mundane wins
+- Overly specific observations ("closing deals while their coffee gets cold")
+- Gentle roasts ("finally remembered how to use the CRM")
+- Relatable office humor ("powered by sheer spite and caffeine")
+- Pop culture references that actually land
+- Fake movie titles for deals ("Fast & Furious: Contract Drift")
+
+RULES:
+- Headlines: Under 50 chars, punchy and quotable
+- Body: Under 80 chars, the funny punchline or detail
+- First names only
+- Varied emojis that match the energy
+- NO generic phrases like "crushing it" or "killing the game"
+- Make each one feel different - vary the humor style
 
 Recent Deals:
 ${dealsText}
 ${teamStatsText}
 
-Respond with a JSON array of news articles in this exact format:
+JSON format:
 [
   {
     "dealIndex": 0,
-    "emoji": "emoji here",
-    "headline": "Short punchy headline",
-    "body": "Fun descriptive body text"
+    "emoji": "emoji",
+    "headline": "Punchy headline",
+    "body": "Funny body text"
   }
 ]
 
-Generate one article per deal, plus one for team stats if provided.`;
+Generate one article per deal (plus team stats if provided). Make them actually laugh.`;
 
     const message = await client.messages.create({
       model: 'claude-3-haiku-20240307',

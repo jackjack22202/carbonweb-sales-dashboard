@@ -487,7 +487,7 @@ const TargetRing = ({ current, goal, label }) => {
       <h2 className="text-2xl font-bold text-gray-800">{label}</h2>
 
       {/* Main content - absolutely positioned to center vertically */}
-      <div className="absolute inset-0 flex items-center justify-center px-6" style={{ top: '60px' }}>
+      <div className="absolute inset-0 flex items-center justify-center px-6" style={{ top: '20px' }}>
         <div className="flex items-center gap-6 w-full justify-center">
           {/* Left side - Stats (bigger text) */}
           <div className="flex-shrink-0">
