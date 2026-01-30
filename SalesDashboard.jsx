@@ -1,5 +1,9 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
+import mondaySdk from 'monday-sdk-js';
 import { useDashboardData } from './src/hooks/useDashboardData';
+
+// Initialize Monday SDK
+const monday = mondaySdk();
 
 // ============ SETTINGS CONTEXT ============
 const defaultSettings = {
@@ -24,25 +28,32 @@ const SettingsContext = createContext({
 
 const useSettings = () => useContext(SettingsContext);
 
-// Get Monday session token from URL or iframe context
-const getMondayToken = () => {
-  // Check URL params (Monday passes token in URL when embedded)
+// Get Monday session token from SDK or URL
+const getMondayToken = async () => {
+  // Try to get token from Monday SDK (works when embedded as Monday app)
+  try {
+    const token = await monday.get('sessionToken');
+    if (token?.data) {
+      sessionStorage.setItem('mondayToken', token.data);
+      return token.data;
+    }
+  } catch (e) {
+    console.log('Not in Monday context, checking URL params...');
+  }
+
+  // Check URL params as fallback
   const urlParams = new URLSearchParams(window.location.search);
   const urlToken = urlParams.get('token') || urlParams.get('sessionToken');
-  if (urlToken) return urlToken;
+  if (urlToken) {
+    sessionStorage.setItem('mondayToken', urlToken);
+    return urlToken;
+  }
 
-  // Check if we have a cached token (from previous session, still valid for ~5 min)
+  // Check cached token from previous session
   const cached = sessionStorage.getItem('mondayToken');
   if (cached) return cached;
 
   return null;
-};
-
-// Cache the Monday token for the session
-const cacheMondayToken = (token) => {
-  if (token) {
-    sessionStorage.setItem('mondayToken', token);
-  }
 };
 
 // Load settings - tries Monday Storage first (if token available), falls back to localStorage
@@ -125,16 +136,18 @@ const SettingsProvider = ({ children }) => {
 
   // On mount: get Monday token and load settings
   useEffect(() => {
-    const token = getMondayToken();
-    if (token) {
-      cacheMondayToken(token);
-      setMondayToken(token);
-    }
+    const initSettings = async () => {
+      const token = await getMondayToken();
+      if (token) {
+        setMondayToken(token);
+      }
 
-    loadSettingsFromAPI(token).then(loaded => {
+      const loaded = await loadSettingsFromAPI(token);
       setSettings(loaded);
       setSettingsLoading(false);
-    });
+    };
+
+    initSettings();
   }, []);
 
   const updateSettings = (newSettings) => {
