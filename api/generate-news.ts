@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
 
 interface DealInfo {
   repName: string;
@@ -55,6 +54,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ news: [] });
     }
 
+    // Dynamic import to avoid module loading issues
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
     const client = new Anthropic({
       apiKey: anthropicKey,
     });
