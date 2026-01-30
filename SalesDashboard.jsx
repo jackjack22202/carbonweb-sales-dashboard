@@ -12,47 +12,94 @@ const defaultSettings = {
   excludedReps: [] // Array of rep names to exclude from leaderboard
 };
 
+const SETTINGS_API_URL = import.meta.env.PROD
+  ? '/api/settings'
+  : (import.meta.env.VITE_SETTINGS_API_URL || '/api/settings');
+
 const SettingsContext = createContext({
   settings: defaultSettings,
-  updateSettings: () => {}
+  updateSettings: () => {},
+  settingsLoading: true
 });
 
 const useSettings = () => useContext(SettingsContext);
 
-// Load settings from localStorage
-const loadSettings = () => {
+// Load settings from Monday board storage (with localStorage fallback)
+const loadSettingsFromAPI = async () => {
+  try {
+    const response = await fetch(SETTINGS_API_URL);
+    if (response.ok) {
+      const data = await response.json();
+      // Also cache to localStorage for faster initial load
+      localStorage.setItem('dashboardSettings', JSON.stringify(data));
+      return { ...defaultSettings, ...data };
+    }
+  } catch (e) {
+    console.warn('Failed to load settings from API, using localStorage fallback:', e);
+  }
+  // Fallback to localStorage
   try {
     const saved = localStorage.getItem('dashboardSettings');
     if (saved) {
       return { ...defaultSettings, ...JSON.parse(saved) };
     }
   } catch (e) {
-    console.error('Failed to load settings:', e);
+    console.error('Failed to load settings from localStorage:', e);
   }
   return defaultSettings;
 };
 
-// Save settings to localStorage
-const saveSettings = (settings) => {
+// Save settings to Monday board storage (and localStorage)
+const saveSettingsToAPI = async (settings) => {
+  // Always save to localStorage for immediate updates
   try {
     localStorage.setItem('dashboardSettings', JSON.stringify(settings));
   } catch (e) {
-    console.error('Failed to save settings:', e);
+    console.error('Failed to save to localStorage:', e);
+  }
+  // Also save to Monday board storage
+  try {
+    const response = await fetch(SETTINGS_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings)
+    });
+    if (!response.ok) {
+      console.warn('Failed to save settings to Monday board storage');
+    }
+  } catch (e) {
+    console.warn('Failed to save settings to API:', e);
   }
 };
 
 // ============ SETTINGS PROVIDER ============
 const SettingsProvider = ({ children }) => {
-  const [settings, setSettings] = useState(loadSettings);
+  const [settings, setSettings] = useState(() => {
+    // Initial load from localStorage for fast render
+    try {
+      const saved = localStorage.getItem('dashboardSettings');
+      if (saved) return { ...defaultSettings, ...JSON.parse(saved) };
+    } catch {}
+    return defaultSettings;
+  });
+  const [settingsLoading, setSettingsLoading] = useState(true);
+
+  // Load settings from API on mount
+  useEffect(() => {
+    loadSettingsFromAPI().then(loaded => {
+      setSettings(loaded);
+      setSettingsLoading(false);
+    });
+  }, []);
 
   const updateSettings = (newSettings) => {
     const updated = { ...settings, ...newSettings };
     setSettings(updated);
-    saveSettings(updated);
+    saveSettingsToAPI(updated);
   };
 
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings }}>
+    <SettingsContext.Provider value={{ settings, updateSettings, settingsLoading }}>
       {children}
     </SettingsContext.Provider>
   );
