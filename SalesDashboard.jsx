@@ -92,6 +92,56 @@ const getCurrentMonth = () => {
 // Lighter grey colors used across widgets
 const LIGHT_GREY = '#E8EAED';  // Lighter background grey
 const TRACK_GREY = '#EBEDEF';  // Ring track grey
+const DIVIDER_GREY = '#D1D5DB'; // Grey for pill dividers
+
+// ============ RANK BADGE COMPONENT (Mario Kart Style) ============
+const RankBadge = ({ rank }) => {
+  // Mario Kart inspired colors - bold, vibrant with gradient effect
+  const badges = {
+    1: {
+      bg: 'linear-gradient(180deg, #FFD700 0%, #FFA500 100%)', // Gold gradient
+      border: '#CC8800',
+      text: '#FFFFFF',
+      shadow: '#B8860B',
+      glow: 'rgba(255, 215, 0, 0.6)'
+    },
+    2: {
+      bg: 'linear-gradient(180deg, #E8E8E8 0%, #A0A0A0 100%)', // Silver gradient
+      border: '#707070',
+      text: '#FFFFFF',
+      shadow: '#606060',
+      glow: 'rgba(192, 192, 192, 0.5)'
+    },
+    3: {
+      bg: 'linear-gradient(180deg, #CD7F32 0%, #8B4513 100%)', // Bronze gradient
+      border: '#6B3A0F',
+      text: '#FFFFFF',
+      shadow: '#5C3317',
+      glow: 'rgba(205, 127, 50, 0.5)'
+    },
+  };
+
+  const badge = badges[rank];
+  if (!badge) return null;
+
+  return (
+    <div
+      className="absolute -top-2 -right-2 w-7 h-7 rounded-full flex items-center justify-center font-black border-2"
+      style={{
+        background: badge.bg,
+        borderColor: badge.border,
+        color: badge.text,
+        fontSize: '14px',
+        textShadow: `1px 1px 0 ${badge.shadow}, -1px -1px 0 ${badge.shadow}, 1px -1px 0 ${badge.shadow}, -1px 1px 0 ${badge.shadow}`,
+        boxShadow: `0 2px 4px rgba(0,0,0,0.3), 0 0 8px ${badge.glow}`,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        letterSpacing: '-0.5px',
+      }}
+    >
+      {rank}
+    </div>
+  );
+};
 
 // ============ AVATAR COMPONENT ============
 const Avatar = ({ initials, color, size = 40, photoUrl = null }) => {
@@ -428,7 +478,7 @@ const TargetRing = ({ current, goal, label }) => {
     requestAnimationFrame(animate);
   }, [percentage]);
 
-  // Ring dimensions
+  // Enlarged ring dimensions - fills more of the container height
   const size = 220;
   const strokeWidth = 22;
   const radius = (size - strokeWidth) / 2;
@@ -449,39 +499,14 @@ const TargetRing = ({ current, goal, label }) => {
   const cy = size / 2;
 
   return (
-    <Card className="p-6 h-full flex flex-col overflow-hidden">
-      <h2 className="text-xl font-semibold text-gray-800 mb-2">{label}</h2>
+    <Card className="p-5 h-full flex flex-col overflow-hidden">
+      <h2 className="text-2xl font-bold text-gray-800 mb-2">{label}</h2>
 
-      <div className="flex-1 flex items-center gap-6">
-        {/* Left side - Stats (larger text) */}
-        <div className="flex-shrink-0 min-w-0">
-          <div className="mb-4">
-            <p className="text-sm font-medium text-gray-400 uppercase tracking-wide mb-1">REVENUE</p>
-            <p className="text-4xl font-bold" style={{ color: mainColor }}>
-              {formatCurrency(animatedValue)}
-            </p>
-          </div>
-
-          <div className="mb-4">
-            <p className="text-sm font-medium text-gray-400 uppercase tracking-wide mb-1">GOAL</p>
-            <p className="text-2xl font-semibold text-gray-700">
-              {formatCurrency(goal)}
-            </p>
-          </div>
-
-          {exceededGoal && (
-            <span
-              className="inline-block px-4 py-1.5 rounded-full text-sm font-semibold"
-              style={{ backgroundColor: '#D1FAE5', color: '#059669' }}
-            >
-              {multiplier}x GOAL
-            </span>
-          )}
-        </div>
-
-        {/* Right side - Ring (larger) */}
-        <div className="flex-1 flex justify-center items-center">
-          <div className="relative" style={{ width: size, height: size }}>
+      {/* Full height flex container to center the ring vertically */}
+      <div className="flex-1 flex items-center justify-center">
+        <div className="flex items-center gap-6">
+          {/* Ring on the left - centered on full container height */}
+          <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
             <svg width={size} height={size}>
               {/* Gradient definition */}
               <defs>
@@ -537,10 +562,36 @@ const TargetRing = ({ current, goal, label }) => {
               />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-3xl font-bold" style={{ color: mainColor }}>
+              <span className="text-5xl font-bold" style={{ color: mainColor }}>
                 {Math.round(animatedPercentage)}%
               </span>
             </div>
+          </div>
+
+          {/* Stats on the right - bigger text */}
+          <div className="flex-shrink-0">
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">REVENUE</p>
+              <p className="text-4xl font-bold" style={{ color: mainColor }}>
+                {formatCurrency(animatedValue)}
+              </p>
+            </div>
+
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">GOAL</p>
+              <p className="text-2xl font-bold text-gray-700">
+                {formatCurrency(goal)}
+              </p>
+            </div>
+
+            {exceededGoal && (
+              <span
+                className="inline-block px-4 py-1.5 rounded-full text-sm font-bold"
+                style={{ backgroundColor: '#D1FAE5', color: '#059669' }}
+              >
+                {multiplier}x GOAL
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -552,25 +603,25 @@ const TargetRing = ({ current, goal, label }) => {
 const TopScopesSold = ({ thisWeek, lastWeek }) => {
   const ScopeCard = ({ title, deal }) => (
     <div className="flex-1 flex flex-col">
-      <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">{title}</p>
+      <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">{title}</p>
       {deal ? (
-        <div className="flex-1 flex items-center justify-center gap-4">
+        <div className="flex-1 flex items-center justify-center gap-5">
           {/* AE Avatar x SE Avatar */}
           <div className="flex items-center gap-1">
-            <Avatar initials={deal.rep.initials} color={deal.rep.color} size={44} photoUrl={deal.rep.photoUrl} />
+            <Avatar initials={deal.rep.initials} color={deal.rep.color} size={48} photoUrl={deal.rep.photoUrl} />
             <span className="text-gray-400 text-lg font-light mx-1">×</span>
             <Avatar
               initials={deal.se?.initials || 'SE'}
               color={deal.se?.color || '#6B7280'}
-              size={44}
+              size={48}
               photoUrl={deal.se?.photoUrl || null}
             />
           </div>
-          {/* Vertical black divider */}
-          <div className="w-px h-12 bg-gray-900" />
+          {/* Grey pill divider */}
+          <div className="w-1 h-14 rounded-full" style={{ backgroundColor: DIVIDER_GREY }} />
           {/* Deal Data */}
           <div className="text-center">
-            <p className="font-medium text-gray-800 text-sm">{deal.company}</p>
+            <p className="font-semibold text-gray-800">{deal.company}</p>
             <p className="text-2xl font-bold" style={{ color: deal.rep.color }}>{formatCurrency(deal.value)}</p>
             <p className="text-xs text-gray-500">{deal.rep.name} + {deal.se?.name || 'SE'}</p>
           </div>
@@ -586,7 +637,7 @@ const TopScopesSold = ({ thisWeek, lastWeek }) => {
 
   return (
     <Card className="p-5 h-full flex flex-col">
-      <h2 className="text-lg font-semibold text-gray-800 mb-2">Top Scopes Sold</h2>
+      <h2 className="text-2xl font-bold text-gray-800 mb-3">Top Scopes Sold</h2>
       <div className="flex-1 flex flex-col">
         <ScopeCard title="THIS WEEK" deal={thisWeek} />
         <div className="border-t border-gray-100 my-2" />
@@ -622,7 +673,7 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
     return (
       <Card className="p-5 h-full flex flex-col">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">Sales Leaderboard</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Sales Leaderboard</h2>
         </div>
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
@@ -675,7 +726,7 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
       )}
 
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">Sales Leaderboard</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Sales Leaderboard</h2>
         <select className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
           <option>This Month</option>
           <option>Last Month</option>
@@ -695,12 +746,10 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
 
           return (
             <div key={rep.repId} className="flex items-center gap-3">
-              {/* Avatar with trophy for top */}
+              {/* Avatar with rank badge for top 3 */}
               <div className="relative flex-shrink-0">
                 <Avatar initials={rep.initials} color={rep.color} size={avatarSize} photoUrl={rep.photoUrl} />
-                {isTop && (
-                  <span className="absolute -top-2 -right-1 text-sm">🏆</span>
-                )}
+                <RankBadge rank={sortedData.indexOf(rep) + 1} />
               </div>
 
               {/* Bar container */}
@@ -813,7 +862,7 @@ const SalesNews = ({ articles, loading, onRefresh }) => {
   return (
     <Card className="p-5 h-full flex flex-col">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">Sales News</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Sales News</h2>
         <button
           onClick={onRefresh}
           disabled={loading}
