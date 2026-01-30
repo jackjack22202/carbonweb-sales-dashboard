@@ -436,7 +436,7 @@ const SettingsPanel = ({ isOpen, onClose, availableReps = [] }) => {
           <div>
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Colors</h3>
             <p className="text-xs text-gray-400 mb-3">These colors are used in the leaderboard bars and target ring widgets</p>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-4">
               <div>
                 <label className="block text-sm text-gray-600 mb-1">CW Sourced</label>
                 <div className="flex items-center gap-2">
@@ -444,9 +444,26 @@ const SettingsPanel = ({ isOpen, onClose, availableReps = [] }) => {
                     type="color"
                     value={localSettings.primaryColor}
                     onChange={(e) => setLocalSettings({ ...localSettings, primaryColor: e.target.value })}
-                    className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer"
+                    className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer flex-shrink-0"
                   />
-                  <span className="text-xs text-gray-400">{localSettings.primaryColor}</span>
+                  <input
+                    type="text"
+                    value={localSettings.primaryColor}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (/^#[0-9A-Fa-f]{0,6}$/.test(val) || val === '') {
+                        setLocalSettings({ ...localSettings, primaryColor: val || '#' });
+                      }
+                    }}
+                    onBlur={(e) => {
+                      // Ensure valid hex on blur
+                      if (!/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) {
+                        setLocalSettings({ ...localSettings, primaryColor: '#8B5CF6' });
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="#8B5CF6"
+                  />
                 </div>
               </div>
               <div>
@@ -456,9 +473,26 @@ const SettingsPanel = ({ isOpen, onClose, availableReps = [] }) => {
                     type="color"
                     value={localSettings.accentColor}
                     onChange={(e) => setLocalSettings({ ...localSettings, accentColor: e.target.value })}
-                    className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer"
+                    className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer flex-shrink-0"
                   />
-                  <span className="text-xs text-gray-400">{localSettings.accentColor}</span>
+                  <input
+                    type="text"
+                    value={localSettings.accentColor}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (/^#[0-9A-Fa-f]{0,6}$/.test(val) || val === '') {
+                        setLocalSettings({ ...localSettings, accentColor: val || '#' });
+                      }
+                    }}
+                    onBlur={(e) => {
+                      // Ensure valid hex on blur
+                      if (!/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) {
+                        setLocalSettings({ ...localSettings, accentColor: '#14B8A6' });
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="#14B8A6"
+                  />
                 </div>
               </div>
               <div>
@@ -468,9 +502,26 @@ const SettingsPanel = ({ isOpen, onClose, availableReps = [] }) => {
                     type="color"
                     value={localSettings.backgroundColor}
                     onChange={(e) => setLocalSettings({ ...localSettings, backgroundColor: e.target.value })}
-                    className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer"
+                    className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer flex-shrink-0"
                   />
-                  <span className="text-xs text-gray-400">{localSettings.backgroundColor}</span>
+                  <input
+                    type="text"
+                    value={localSettings.backgroundColor}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (/^#[0-9A-Fa-f]{0,6}$/.test(val) || val === '') {
+                        setLocalSettings({ ...localSettings, backgroundColor: val || '#' });
+                      }
+                    }}
+                    onBlur={(e) => {
+                      // Ensure valid hex on blur
+                      if (!/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) {
+                        setLocalSettings({ ...localSettings, backgroundColor: '#F9FAFB' });
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="#F9FAFB"
+                  />
                 </div>
               </div>
             </div>
