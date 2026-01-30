@@ -483,40 +483,33 @@ const TargetRing = ({ current, goal, label }) => {
   const cy = size / 2;
 
   return (
-    <Card className="p-6 h-full flex flex-col overflow-hidden">
-      <h2 className="text-2xl font-bold text-gray-800 flex-shrink-0">{label}</h2>
+    <Card className="p-6 h-full flex flex-col overflow-hidden relative">
+      <h2 className="text-2xl font-bold text-gray-800">{label}</h2>
 
-      <div className="flex-1 flex items-center justify-center gap-6">
-        {/* Left side - Stats (bigger text) */}
-        <div className="flex-shrink-0 min-w-0">
-          <div className="mb-3">
-            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">REVENUE</p>
-            <p className="text-5xl font-bold" style={{ color: mainColor }}>
-              {formatCurrency(animatedValue)}
-            </p>
+      {/* Main content - absolutely positioned to center vertically */}
+      <div className="absolute inset-0 flex items-center justify-center px-6" style={{ top: '60px' }}>
+        <div className="flex items-center gap-6 w-full justify-center">
+          {/* Left side - Stats (bigger text) */}
+          <div className="flex-shrink-0">
+            <div className="mb-2">
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">REVENUE</p>
+              <p className="text-5xl font-bold" style={{ color: mainColor }}>
+                {formatCurrency(animatedValue)}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">GOAL</p>
+              <p className="text-3xl font-bold text-gray-700">
+                {formatCurrency(goal)}
+              </p>
+            </div>
           </div>
 
-          <div className="mb-3">
-            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">GOAL</p>
-            <p className="text-3xl font-bold text-gray-700">
-              {formatCurrency(goal)}
-            </p>
-          </div>
-
-          {exceededGoal && (
-            <span
-              className="inline-block px-4 py-1.5 rounded-full text-sm font-bold"
-              style={{ backgroundColor: '#D1FAE5', color: '#059669' }}
-            >
-              {multiplier}x GOAL
-            </span>
-          )}
-        </div>
-
-        {/* Right side - Ring (larger, vertically centered) */}
-        <div className="flex justify-center items-center flex-shrink-0">
-          <div className="relative" style={{ width: size, height: size }}>
-            <svg width={size} height={size}>
+          {/* Right side - Ring */}
+          <div className="flex-shrink-0">
+            <div className="relative" style={{ width: size, height: size }}>
+              <svg width={size} height={size}>
               {/* Gradient definition */}
               <defs>
                 <linearGradient id={`ringGradient-${filterId}`} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -577,7 +570,20 @@ const TargetRing = ({ current, goal, label }) => {
             </div>
           </div>
         </div>
+        </div>
       </div>
+
+      {/* Badge - absolutely positioned at bottom left, doesn't affect layout */}
+      {exceededGoal && (
+        <div className="absolute bottom-5 left-6">
+          <span
+            className="inline-block px-4 py-1.5 rounded-full text-sm font-bold"
+            style={{ backgroundColor: '#D1FAE5', color: '#059669' }}
+          >
+            {multiplier}x GOAL
+          </span>
+        </div>
+      )}
     </Card>
   );
 };
