@@ -96,29 +96,11 @@ const DIVIDER_GREY = '#D1D5DB'; // Grey for pill dividers
 
 // ============ RANK BADGE COMPONENT (Mario Kart Style) ============
 const RankBadge = ({ rank }) => {
-  // Mario Kart inspired colors - bold, vibrant with gradient effect
+  // Mario Kart style - bold colored numbers with black outline
   const badges = {
-    1: {
-      bg: 'linear-gradient(180deg, #FFD700 0%, #FFA500 100%)', // Gold gradient
-      border: '#CC8800',
-      text: '#FFFFFF',
-      shadow: '#B8860B',
-      glow: 'rgba(255, 215, 0, 0.6)'
-    },
-    2: {
-      bg: 'linear-gradient(180deg, #E8E8E8 0%, #A0A0A0 100%)', // Silver gradient
-      border: '#707070',
-      text: '#FFFFFF',
-      shadow: '#606060',
-      glow: 'rgba(192, 192, 192, 0.5)'
-    },
-    3: {
-      bg: 'linear-gradient(180deg, #CD7F32 0%, #8B4513 100%)', // Bronze gradient
-      border: '#6B3A0F',
-      text: '#FFFFFF',
-      shadow: '#5C3317',
-      glow: 'rgba(205, 127, 50, 0.5)'
-    },
+    1: { color: '#E53935' },  // Red for 1st
+    2: { color: '#1E88E5' },  // Blue for 2nd
+    3: { color: '#43A047' },  // Green for 3rd
   };
 
   const badge = badges[rank];
@@ -126,16 +108,15 @@ const RankBadge = ({ rank }) => {
 
   return (
     <div
-      className="absolute -top-2 -right-2 w-7 h-7 rounded-full flex items-center justify-center font-black border-2"
+      className="absolute -top-1 -right-1 flex items-center justify-center"
       style={{
-        background: badge.bg,
-        borderColor: badge.border,
-        color: badge.text,
-        fontSize: '14px',
-        textShadow: `1px 1px 0 ${badge.shadow}, -1px -1px 0 ${badge.shadow}, 1px -1px 0 ${badge.shadow}, -1px 1px 0 ${badge.shadow}`,
-        boxShadow: `0 2px 4px rgba(0,0,0,0.3), 0 0 8px ${badge.glow}`,
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        letterSpacing: '-0.5px',
+        fontSize: '22px',
+        fontWeight: 900,
+        fontStyle: 'italic',
+        color: badge.color,
+        textShadow: '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000',
+        fontFamily: 'Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif',
+        lineHeight: 1,
       }}
     >
       {rank}
@@ -478,9 +459,9 @@ const TargetRing = ({ current, goal, label }) => {
     requestAnimationFrame(animate);
   }, [percentage]);
 
-  // Enlarged ring dimensions - fills more of the container height
-  const size = 220;
-  const strokeWidth = 22;
+  // Larger ring dimensions
+  const size = 240;
+  const strokeWidth = 24;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
@@ -499,14 +480,39 @@ const TargetRing = ({ current, goal, label }) => {
   const cy = size / 2;
 
   return (
-    <Card className="p-5 h-full flex flex-col overflow-hidden">
+    <Card className="p-6 h-full flex flex-col overflow-hidden">
       <h2 className="text-2xl font-bold text-gray-800 mb-2">{label}</h2>
 
-      {/* Full height flex container to center the ring vertically */}
-      <div className="flex-1 flex items-center justify-center">
-        <div className="flex items-center gap-6">
-          {/* Ring on the left - centered on full container height */}
-          <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      <div className="flex-1 flex items-center gap-6">
+        {/* Left side - Stats (bigger text) */}
+        <div className="flex-shrink-0 min-w-0">
+          <div className="mb-4">
+            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">REVENUE</p>
+            <p className="text-5xl font-bold" style={{ color: mainColor }}>
+              {formatCurrency(animatedValue)}
+            </p>
+          </div>
+
+          <div className="mb-4">
+            <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">GOAL</p>
+            <p className="text-3xl font-bold text-gray-700">
+              {formatCurrency(goal)}
+            </p>
+          </div>
+
+          {exceededGoal && (
+            <span
+              className="inline-block px-4 py-1.5 rounded-full text-sm font-bold"
+              style={{ backgroundColor: '#D1FAE5', color: '#059669' }}
+            >
+              {multiplier}x GOAL
+            </span>
+          )}
+        </div>
+
+        {/* Right side - Ring (larger) */}
+        <div className="flex-1 flex justify-center items-center">
+          <div className="relative" style={{ width: size, height: size }}>
             <svg width={size} height={size}>
               {/* Gradient definition */}
               <defs>
@@ -566,32 +572,6 @@ const TargetRing = ({ current, goal, label }) => {
                 {Math.round(animatedPercentage)}%
               </span>
             </div>
-          </div>
-
-          {/* Stats on the right - bigger text */}
-          <div className="flex-shrink-0">
-            <div className="mb-4">
-              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">REVENUE</p>
-              <p className="text-4xl font-bold" style={{ color: mainColor }}>
-                {formatCurrency(animatedValue)}
-              </p>
-            </div>
-
-            <div className="mb-3">
-              <p className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">GOAL</p>
-              <p className="text-2xl font-bold text-gray-700">
-                {formatCurrency(goal)}
-              </p>
-            </div>
-
-            {exceededGoal && (
-              <span
-                className="inline-block px-4 py-1.5 rounded-full text-sm font-bold"
-                style={{ backgroundColor: '#D1FAE5', color: '#059669' }}
-              >
-                {multiplier}x GOAL
-              </span>
-            )}
           </div>
         </div>
       </div>
