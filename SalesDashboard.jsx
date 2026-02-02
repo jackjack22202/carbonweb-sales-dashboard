@@ -987,8 +987,7 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
       </div>
 
       <div className="flex-1 flex flex-col justify-evenly" style={{ gap: `${gap}px` }}>
-        {sortedData.map((rep) => {
-          const isTop = rep.repId === topPerformer.repId;
+        {sortedData.map((rep, index) => {
           const displayValue = getDisplayValue(rep);
           const displayWidthPercent = (displayValue / maxValue) * 100;
 
@@ -1006,23 +1005,29 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
           const cappedTotalPercent = Math.min(totalCurrentPercent, 85);
           const cappedLastMonthPercent = Math.min(lastMonthWidthPercent, 85);
 
+          // Only show rank badge if rep has current month sales > 0 (for "This Month" view)
+          // For other views, show rank if they have any value
+          const hasCurrentMonthSales = rep.currentMonth > 0;
+          const showRank = timePeriod === 'thisMonth' ? hasCurrentMonthSales : displayValue > 0;
+          const rank = index + 1;
+
           return (
             <div key={rep.repId} className="flex items-center gap-3">
-              {/* Avatar with rank badge on left for top 3 */}
+              {/* Avatar with rank badge on left for top 3 (only if they have sales this month) */}
               <div className="relative flex-shrink-0 ml-4">
-                <RankBadge rank={sortedData.indexOf(rep) + 1} position="left" />
+                {showRank && <RankBadge rank={rank} position="left" />}
                 <Avatar initials={rep.initials} color={rep.color} size={avatarSize} photoUrl={rep.photoUrl} />
               </div>
 
-              {/* Bar container - overflow hidden to prevent labels going outside */}
+              {/* Bar container */}
               <div
-                className="flex-1 relative rounded-xl overflow-hidden"
+                className="flex-1 relative"
                 style={{ height: `${barHeight}px` }}
               >
                 {/* Last month bar (lighter grey) - only show for "This Month" view */}
-                {showStacked && (
+                {showStacked && cappedLastMonthPercent > 0 && (
                   <div
-                    className="absolute inset-y-0 left-0 rounded-l-xl cursor-pointer"
+                    className="absolute inset-y-0 left-0 rounded-xl cursor-pointer"
                     style={{
                       width: `${cappedLastMonthPercent}%`,
                       backgroundColor: LIGHT_GREY,
@@ -1035,8 +1040,9 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
                 )}
 
                 {/* Stacked/Single bar */}
+                {cappedTotalPercent > 0 && (
                 <div
-                  className="absolute inset-y-0 left-0 flex rounded-l-xl overflow-hidden transition-all duration-1000 ease-out"
+                  className="absolute inset-y-0 left-0 flex rounded-xl overflow-hidden transition-all duration-1000 ease-out"
                   style={{ width: `${cappedTotalPercent}%`, height: `${barHeight}px` }}
                 >
                   {showStacked ? (
@@ -1071,7 +1077,7 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
                   ) : (
                     /* Single bar for Last Month / Quarter view */
                     <div
-                      className="h-full w-full cursor-pointer"
+                      className="h-full w-full cursor-pointer rounded-xl"
                       style={{ backgroundColor: cwColor }}
                       onMouseEnter={(e) => handleMouseEnter(e, `${timePeriod === 'lastMonth' ? 'Last Month' : 'This Quarter'}: ${formatCurrency(displayValue)}`)}
                       onMouseMove={handleMouseMove}
@@ -1079,11 +1085,12 @@ const SalesLeaderboard = ({ data, loading, availableHeight }) => {
                     />
                   )}
                 </div>
+                )}
 
-                {/* Value label - positioned after the bar */}
+                {/* Value label - positioned after the bar (or at start if no bar) */}
                 <div
                   className="absolute inset-y-0 flex items-center pointer-events-none"
-                  style={{ left: `${cappedTotalPercent}%`, paddingLeft: '8px' }}
+                  style={{ left: `${Math.max(cappedTotalPercent, 0)}%`, paddingLeft: cappedTotalPercent > 0 ? '8px' : '0' }}
                 >
                   <span className="text-gray-900 text-sm font-semibold whitespace-nowrap">
                     {formatCurrencyShort(displayValue)}
