@@ -40,13 +40,15 @@ async function getStoredSettings(): Promise<DashboardSettings | null> {
 
   if (blobToken) {
     try {
-      // List blobs to find our settings file
-      const { list } = await import('@vercel/blob');
-      const { blobs } = await list({ prefix: SETTINGS_BLOB_PATH, token: blobToken });
+      const { head } = await import('@vercel/blob');
 
-      if (blobs.length > 0) {
-        // Fetch the settings JSON from the blob URL
-        const response = await fetch(blobs[0].url);
+      // Try to get the blob directly by constructing its URL
+      // When addRandomSuffix is false, the URL is deterministic
+      const blobMeta = await head(SETTINGS_BLOB_PATH, { token: blobToken });
+
+      if (blobMeta?.url) {
+        // Add cache-busting query param to avoid CDN caching
+        const response = await fetch(`${blobMeta.url}?t=${Date.now()}`);
         if (response.ok) {
           const settings = await response.json();
           cachedSettings = settings;
@@ -55,6 +57,7 @@ async function getStoredSettings(): Promise<DashboardSettings | null> {
         }
       }
     } catch (e) {
+      // head() throws if blob doesn't exist, which is fine for first run
       console.warn('Blob read failed, using cache/defaults:', e);
     }
   }
@@ -85,21 +88,17 @@ async function saveStoredSettings(settings: DashboardSettings): Promise<boolean>
 
   if (blobToken) {
     try {
-      const { put, del, list } = await import('@vercel/blob');
+      const { put } = await import('@vercel/blob');
 
-      // Delete old settings blob if it exists
-      const { blobs } = await list({ prefix: SETTINGS_BLOB_PATH, token: blobToken });
-      for (const blob of blobs) {
-        await del(blob.url, { token: blobToken });
-      }
-
-      // Upload new settings
+      // Use addRandomSuffix: false to overwrite the same file each time
       await put(SETTINGS_BLOB_PATH, JSON.stringify(settings), {
         access: 'public',
         token: blobToken,
-        contentType: 'application/json'
+        contentType: 'application/json',
+        addRandomSuffix: false
       });
 
+      console.log('Settings saved to Blob successfully');
       return true;
     } catch (e) {
       console.warn('Blob write failed:', e);
