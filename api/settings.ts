@@ -1,8 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// Use a global settings key - stored in Vercel KV or environment
-// This ensures ALL users see the same settings regardless of who saved them
-const SETTINGS_KEY = 'global_dashboard_settings';
+// Settings stored in Vercel Blob (available by default)
+const SETTINGS_BLOB_PATH = 'dashboard-settings.json';
 
 interface DashboardSettings {
   topDealsMinThreshold: number;
@@ -25,38 +24,51 @@ const defaultSettings: DashboardSettings = {
 };
 
 // In-memory cache for settings (shared across requests in the same serverless instance)
-// For true persistence, this is also stored in Vercel KV if available
 let cachedSettings: DashboardSettings | null = null;
 let cacheTimestamp: number = 0;
-const CACHE_TTL = 60000; // 1 minute cache
+const CACHE_TTL = 30000; // 30 second cache
 
-// Try to use Vercel KV for persistent storage, fall back to in-memory
+// Try to use Vercel Blob for persistent storage
 async function getStoredSettings(): Promise<DashboardSettings | null> {
   // Check in-memory cache first
   if (cachedSettings && Date.now() - cacheTimestamp < CACHE_TTL) {
     return cachedSettings;
   }
 
-  // Try Vercel KV if available
-  const kvUrl = process.env.KV_REST_API_URL;
-  const kvToken = process.env.KV_REST_API_TOKEN;
+  // Try Vercel Blob if token is available
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 
-  if (kvUrl && kvToken) {
+  if (blobToken) {
     try {
-      const response = await fetch(`${kvUrl}/get/${SETTINGS_KEY}`, {
-        headers: { Authorization: `Bearer ${kvToken}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.result) {
-          const settings = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+      // List blobs to find our settings file
+      const { list } = await import('@vercel/blob');
+      const { blobs } = await list({ prefix: SETTINGS_BLOB_PATH, token: blobToken });
+
+      if (blobs.length > 0) {
+        // Fetch the settings JSON from the blob URL
+        const response = await fetch(blobs[0].url);
+        if (response.ok) {
+          const settings = await response.json();
           cachedSettings = settings;
           cacheTimestamp = Date.now();
           return settings;
         }
       }
     } catch (e) {
-      console.warn('KV read failed, using cache/defaults:', e);
+      console.warn('Blob read failed, using cache/defaults:', e);
+    }
+  }
+
+  // Check environment variable fallback (DASHBOARD_SETTINGS)
+  const envSettings = process.env.DASHBOARD_SETTINGS;
+  if (envSettings) {
+    try {
+      const settings = JSON.parse(envSettings);
+      cachedSettings = settings;
+      cacheTimestamp = Date.now();
+      return settings;
+    } catch (e) {
+      console.warn('Failed to parse DASHBOARD_SETTINGS env var:', e);
     }
   }
 
@@ -68,27 +80,33 @@ async function saveStoredSettings(settings: DashboardSettings): Promise<boolean>
   cachedSettings = settings;
   cacheTimestamp = Date.now();
 
-  // Try to persist to Vercel KV if available
-  const kvUrl = process.env.KV_REST_API_URL;
-  const kvToken = process.env.KV_REST_API_TOKEN;
+  // Try to persist to Vercel Blob if available
+  const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 
-  if (kvUrl && kvToken) {
+  if (blobToken) {
     try {
-      const response = await fetch(`${kvUrl}/set/${SETTINGS_KEY}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${kvToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(settings)
+      const { put, del, list } = await import('@vercel/blob');
+
+      // Delete old settings blob if it exists
+      const { blobs } = await list({ prefix: SETTINGS_BLOB_PATH, token: blobToken });
+      for (const blob of blobs) {
+        await del(blob.url, { token: blobToken });
+      }
+
+      // Upload new settings
+      await put(SETTINGS_BLOB_PATH, JSON.stringify(settings), {
+        access: 'public',
+        token: blobToken,
+        contentType: 'application/json'
       });
-      return response.ok;
+
+      return true;
     } catch (e) {
-      console.warn('KV write failed:', e);
+      console.warn('Blob write failed:', e);
     }
   }
 
-  // Even without KV, in-memory cache will work for the serverless instance lifetime
+  // Even without Blob, in-memory cache will work for the serverless instance lifetime
   return true;
 }
 
