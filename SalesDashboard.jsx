@@ -1,9 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import mondaySdk from 'monday-sdk-js';
 import { useDashboardData } from './src/hooks/useDashboardData';
-
-// Initialize Monday SDK
-const monday = mondaySdk();
 
 // ============ SETTINGS CONTEXT ============
 const defaultSettings = {
@@ -28,52 +24,20 @@ const SettingsContext = createContext({
 
 const useSettings = () => useContext(SettingsContext);
 
-// Get Monday session token from SDK or URL
-const getMondayToken = async () => {
-  // Try to get token from Monday SDK (works when embedded as Monday app)
+// Load settings - always tries global API first, falls back to localStorage
+const loadSettingsFromAPI = async () => {
+  // Always try global API first (shared across all users)
   try {
-    const token = await monday.get('sessionToken');
-    if (token?.data) {
-      sessionStorage.setItem('mondayToken', token.data);
-      return token.data;
+    const response = await fetch(SETTINGS_API_URL);
+    if (response.ok) {
+      const data = await response.json();
+      // Cache to localStorage for faster future loads
+      localStorage.setItem('dashboardSettings', JSON.stringify(data));
+      console.log('Settings loaded from global API:', data._source);
+      return { ...defaultSettings, ...data };
     }
   } catch (e) {
-    console.log('Not in Monday context, checking URL params...');
-  }
-
-  // Check URL params as fallback
-  const urlParams = new URLSearchParams(window.location.search);
-  const urlToken = urlParams.get('token') || urlParams.get('sessionToken');
-  if (urlToken) {
-    sessionStorage.setItem('mondayToken', urlToken);
-    return urlToken;
-  }
-
-  // Check cached token from previous session
-  const cached = sessionStorage.getItem('mondayToken');
-  if (cached) return cached;
-
-  return null;
-};
-
-// Load settings - tries Monday Storage first (if token available), falls back to localStorage
-const loadSettingsFromAPI = async (token) => {
-  // Try Monday Storage API if we have a token
-  if (token) {
-    try {
-      const response = await fetch(SETTINGS_API_URL, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        // Cache to localStorage for faster future loads
-        localStorage.setItem('dashboardSettings', JSON.stringify(data));
-        console.log('Settings loaded from Monday Storage');
-        return { ...defaultSettings, ...data };
-      }
-    } catch (e) {
-      console.warn('Failed to load from Monday Storage:', e);
-    }
+    console.warn('Failed to load from global API:', e);
   }
 
   // Fallback to localStorage
@@ -90,8 +54,8 @@ const loadSettingsFromAPI = async (token) => {
   return defaultSettings;
 };
 
-// Save settings - saves to localStorage immediately, syncs to Monday Storage if token available
-const saveSettingsToAPI = async (settings, token) => {
+// Save settings - saves globally via API and locally for instant feedback
+const saveSettingsToAPI = async (settings) => {
   // Always save to localStorage for immediate persistence
   try {
     localStorage.setItem('dashboardSettings', JSON.stringify(settings));
@@ -99,25 +63,22 @@ const saveSettingsToAPI = async (settings, token) => {
     console.error('Failed to save to localStorage:', e);
   }
 
-  // Sync to Monday Storage if we have a token
-  if (token) {
-    try {
-      const response = await fetch(SETTINGS_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(settings)
-      });
-      if (response.ok) {
-        console.log('Settings synced to Monday Storage');
-      } else {
-        console.warn('Failed to sync settings to Monday Storage');
-      }
-    } catch (e) {
-      console.warn('Failed to sync to Monday Storage:', e);
+  // Save to global API (shared across all users)
+  try {
+    const response = await fetch(SETTINGS_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(settings)
+    });
+    if (response.ok) {
+      console.log('Settings saved globally');
+    } else {
+      console.warn('Failed to save settings globally');
     }
+  } catch (e) {
+    console.warn('Failed to save to global API:', e);
   }
 };
 
@@ -132,17 +93,11 @@ const SettingsProvider = ({ children }) => {
     return defaultSettings;
   });
   const [settingsLoading, setSettingsLoading] = useState(true);
-  const [mondayToken, setMondayToken] = useState(null);
 
-  // On mount: get Monday token and load settings
+  // On mount: load settings from global API
   useEffect(() => {
     const initSettings = async () => {
-      const token = await getMondayToken();
-      if (token) {
-        setMondayToken(token);
-      }
-
-      const loaded = await loadSettingsFromAPI(token);
+      const loaded = await loadSettingsFromAPI();
       setSettings(loaded);
       setSettingsLoading(false);
     };
@@ -153,7 +108,7 @@ const SettingsProvider = ({ children }) => {
   const updateSettings = (newSettings) => {
     const updated = { ...settings, ...newSettings };
     setSettings(updated);
-    saveSettingsToAPI(updated, mondayToken);
+    saveSettingsToAPI(updated);
   };
 
   return (

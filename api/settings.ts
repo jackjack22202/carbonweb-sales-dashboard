@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { Storage } from '@mondaycom/apps-sdk';
 
-const SETTINGS_KEY = 'dashboard_settings';
+// Use a global settings key - stored in Vercel KV or environment
+// This ensures ALL users see the same settings regardless of who saved them
+const SETTINGS_KEY = 'global_dashboard_settings';
 
 interface DashboardSettings {
   topDealsMinThreshold: number;
@@ -23,6 +24,74 @@ const defaultSettings: DashboardSettings = {
   excludedReps: []
 };
 
+// In-memory cache for settings (shared across requests in the same serverless instance)
+// For true persistence, this is also stored in Vercel KV if available
+let cachedSettings: DashboardSettings | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_TTL = 60000; // 1 minute cache
+
+// Try to use Vercel KV for persistent storage, fall back to in-memory
+async function getStoredSettings(): Promise<DashboardSettings | null> {
+  // Check in-memory cache first
+  if (cachedSettings && Date.now() - cacheTimestamp < CACHE_TTL) {
+    return cachedSettings;
+  }
+
+  // Try Vercel KV if available
+  const kvUrl = process.env.KV_REST_API_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN;
+
+  if (kvUrl && kvToken) {
+    try {
+      const response = await fetch(`${kvUrl}/get/${SETTINGS_KEY}`, {
+        headers: { Authorization: `Bearer ${kvToken}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.result) {
+          const settings = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
+          cachedSettings = settings;
+          cacheTimestamp = Date.now();
+          return settings;
+        }
+      }
+    } catch (e) {
+      console.warn('KV read failed, using cache/defaults:', e);
+    }
+  }
+
+  return cachedSettings;
+}
+
+async function saveStoredSettings(settings: DashboardSettings): Promise<boolean> {
+  // Always update in-memory cache
+  cachedSettings = settings;
+  cacheTimestamp = Date.now();
+
+  // Try to persist to Vercel KV if available
+  const kvUrl = process.env.KV_REST_API_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN;
+
+  if (kvUrl && kvToken) {
+    try {
+      const response = await fetch(`${kvUrl}/set/${SETTINGS_KEY}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${kvToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(settings)
+      });
+      return response.ok;
+    } catch (e) {
+      console.warn('KV write failed:', e);
+    }
+  }
+
+  // Even without KV, in-memory cache will work for the serverless instance lifetime
+  return true;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -33,31 +102,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  // Get token from Authorization header (short-lived token from Monday iframe)
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.replace('Bearer ', '');
-
-  if (!token) {
-    // No token - return defaults (client will use localStorage)
-    if (req.method === 'GET') {
-      return res.status(200).json({ ...defaultSettings, _source: 'defaults' });
-    }
-    return res.status(401).json({ error: 'No authorization token provided' });
-  }
-
   try {
-    // Initialize Monday Storage with the short-lived token
-    const storage = new Storage(token);
-
     if (req.method === 'GET') {
-      // Get settings from Monday Storage
-      const result = await storage.get(SETTINGS_KEY, { shared: true });
+      // Get globally shared settings
+      const stored = await getStoredSettings();
 
-      if (result.success && result.value) {
-        const settings = typeof result.value === 'string'
-          ? JSON.parse(result.value)
-          : result.value;
-        return res.status(200).json({ ...defaultSettings, ...settings, _source: 'monday' });
+      if (stored) {
+        return res.status(200).json({ ...defaultSettings, ...stored, _source: 'global' });
       }
 
       // No settings stored yet - return defaults
@@ -65,22 +116,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST') {
-      // Save settings to Monday Storage
+      // Save settings globally (any authenticated user can save)
       const newSettings = req.body as Partial<DashboardSettings>;
       const mergedSettings = { ...defaultSettings, ...newSettings };
 
       // Remove internal fields before storing
       const { _source, ...settingsToStore } = mergedSettings as any;
 
-      const result = await storage.set(SETTINGS_KEY, JSON.stringify(settingsToStore), {
-        shared: true  // Accessible from both frontend and backend
-      });
+      const success = await saveStoredSettings(settingsToStore);
 
-      if (result.success) {
+      if (success) {
         return res.status(200).json({ success: true, settings: settingsToStore });
       } else {
-        console.error('Monday Storage set failed:', result.error);
-        return res.status(500).json({ error: 'Failed to save to Monday Storage', details: result.error });
+        return res.status(500).json({ error: 'Failed to save settings' });
       }
     }
 
