@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// Settings stored in Vercel Blob (available by default)
-const SETTINGS_BLOB_PATH = 'dashboard-settings.json';
+const SETTINGS_BLOB_NAME = 'dashboard-settings.json';
 
 interface DashboardSettings {
   topDealsMinThreshold: number;
@@ -23,32 +22,32 @@ const defaultSettings: DashboardSettings = {
   excludedReps: []
 };
 
-// In-memory cache for settings (shared across requests in the same serverless instance)
+// In-memory cache with short TTL
 let cachedSettings: DashboardSettings | null = null;
+let cachedBlobUrl: string | null = null;
 let cacheTimestamp: number = 0;
-const CACHE_TTL = 30000; // 30 second cache
+const CACHE_TTL = 10000; // 10 second cache
 
-// Try to use Vercel Blob for persistent storage
 async function getStoredSettings(): Promise<DashboardSettings | null> {
   // Check in-memory cache first
   if (cachedSettings && Date.now() - cacheTimestamp < CACHE_TTL) {
     return cachedSettings;
   }
 
-  // Try Vercel Blob if token is available
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 
   if (blobToken) {
     try {
-      const { head } = await import('@vercel/blob');
+      const { list } = await import('@vercel/blob');
 
-      // Try to get the blob directly by constructing its URL
-      // When addRandomSuffix is false, the URL is deterministic
-      const blobMeta = await head(SETTINGS_BLOB_PATH, { token: blobToken });
+      // List all blobs and find our settings file
+      const { blobs } = await list({ token: blobToken });
+      const settingsBlob = blobs.find(b => b.pathname === SETTINGS_BLOB_NAME);
 
-      if (blobMeta?.url) {
-        // Add cache-busting query param to avoid CDN caching
-        const response = await fetch(`${blobMeta.url}?t=${Date.now()}`);
+      if (settingsBlob) {
+        cachedBlobUrl = settingsBlob.url;
+        // Fetch with cache-busting
+        const response = await fetch(`${settingsBlob.url}?t=${Date.now()}`);
         if (response.ok) {
           const settings = await response.json();
           cachedSettings = settings;
@@ -57,21 +56,17 @@ async function getStoredSettings(): Promise<DashboardSettings | null> {
         }
       }
     } catch (e) {
-      // head() throws if blob doesn't exist, which is fine for first run
-      console.warn('Blob read failed, using cache/defaults:', e);
+      console.error('Blob read error:', e);
     }
   }
 
-  // Check environment variable fallback (DASHBOARD_SETTINGS)
+  // Fallback to environment variable
   const envSettings = process.env.DASHBOARD_SETTINGS;
   if (envSettings) {
     try {
-      const settings = JSON.parse(envSettings);
-      cachedSettings = settings;
-      cacheTimestamp = Date.now();
-      return settings;
+      return JSON.parse(envSettings);
     } catch (e) {
-      console.warn('Failed to parse DASHBOARD_SETTINGS env var:', e);
+      console.warn('Failed to parse DASHBOARD_SETTINGS:', e);
     }
   }
 
@@ -79,33 +74,45 @@ async function getStoredSettings(): Promise<DashboardSettings | null> {
 }
 
 async function saveStoredSettings(settings: DashboardSettings): Promise<boolean> {
-  // Always update in-memory cache
-  cachedSettings = settings;
-  cacheTimestamp = Date.now();
-
-  // Try to persist to Vercel Blob if available
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
 
   if (blobToken) {
     try {
-      const { put } = await import('@vercel/blob');
+      const { put, del, list } = await import('@vercel/blob');
 
-      // Use addRandomSuffix: false to overwrite the same file each time
-      await put(SETTINGS_BLOB_PATH, JSON.stringify(settings), {
+      // First, delete any existing settings blobs
+      const { blobs } = await list({ token: blobToken });
+      const existingBlobs = blobs.filter(b => b.pathname === SETTINGS_BLOB_NAME || b.pathname.startsWith('dashboard-settings'));
+
+      for (const blob of existingBlobs) {
+        await del(blob.url, { token: blobToken });
+      }
+
+      // Now create new blob
+      const result = await put(SETTINGS_BLOB_NAME, JSON.stringify(settings), {
         access: 'public',
         token: blobToken,
         contentType: 'application/json',
         addRandomSuffix: false
       });
 
-      console.log('Settings saved to Blob successfully');
+      console.log('Settings saved to Blob:', result.url);
+
+      // Update cache immediately
+      cachedSettings = settings;
+      cachedBlobUrl = result.url;
+      cacheTimestamp = Date.now();
+
       return true;
     } catch (e) {
-      console.warn('Blob write failed:', e);
+      console.error('Blob write error:', e);
+      return false;
     }
   }
 
-  // Even without Blob, in-memory cache will work for the serverless instance lifetime
+  // No blob token - just cache in memory
+  cachedSettings = settings;
+  cacheTimestamp = Date.now();
   return true;
 }
 
@@ -121,23 +128,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === 'GET') {
-      // Get globally shared settings
       const stored = await getStoredSettings();
 
       if (stored) {
         return res.status(200).json({ ...defaultSettings, ...stored, _source: 'global' });
       }
 
-      // No settings stored yet - return defaults
       return res.status(200).json({ ...defaultSettings, _source: 'defaults' });
     }
 
     if (req.method === 'POST') {
-      // Save settings globally (any authenticated user can save)
       const newSettings = req.body as Partial<DashboardSettings>;
       const mergedSettings = { ...defaultSettings, ...newSettings };
 
-      // Remove internal fields before storing
+      // Remove internal fields
       const { _source, ...settingsToStore } = mergedSettings as any;
 
       const success = await saveStoredSettings(settingsToStore);
@@ -145,7 +149,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (success) {
         return res.status(200).json({ success: true, settings: settingsToStore });
       } else {
-        return res.status(500).json({ error: 'Failed to save settings' });
+        return res.status(500).json({ error: 'Failed to save settings to Blob storage' });
       }
     }
 
@@ -153,7 +157,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('Settings API error:', error);
 
-    // Graceful degradation - return defaults on error for GET
     if (req.method === 'GET') {
       return res.status(200).json({ ...defaultSettings, _source: 'error-fallback' });
     }
